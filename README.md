@@ -112,9 +112,10 @@ display start year, because that is the unchanged chart start.
 
 Omitting `--reader` (or using `--reader legacy`) keeps the original command,
 file discovery, reader, and standard-library-only dependencies. Unsupported
-opt-in inputs fail without falling back. This C2VSimFG build requires all four
-sources and the full known alias set; the standalone adapter remains more
-general. Acreage columns are explicitly mapped into legacy alias order.
+opt-in inputs fail without falling back. Without configuration, the build
+requires all four sources and the full known alias set, mapped into legacy
+alias order. Configured builds use available adapter sources and their verified
+column order instead, including different nonponded crop counts.
 
 Opt-in builds preserve the existing geometry-area denominator, labels, groups,
 colors, July 1 date selection, January-of-prior-year retention threshold,
@@ -137,3 +138,91 @@ standalone exporter accepts the adapter snapshot with either viewer template:
 Keep `$Output`, `$ExpandedHtml`, `$NaipHtml`, and all comparison reports outside
 the repository. The local v2.0 candidate is not authenticated as the exact deck
 used for the previously shared viewer; record its provenance separately.
+
+## Model Category Configuration
+
+Add `--model-config .\examples\c2vsimfg.json` to the opt-in build command above.
+This presentation-only JSON is supported only with `--reader iwfm-io`. The
+C2VSimFG example reproduces the current labels, category/group colors, All rice,
+All refuge, All nonponded crops, Native + riparian vegetation, and Total
+irrigated agriculture (explicitly excluding Idle and refuge).
+
+```json
+{
+	"version": 1,
+	"categories": {
+		"nonponded:OR": {"label": "Orchards", "color": "#ad6a1d"}
+	},
+	"groups": [
+		{
+			"id": "group:agriculture",
+			"label": "Agriculture",
+			"members": ["nonponded:OR", "nonponded:GR"],
+			"color": "#267747"
+		}
+	],
+	"initial_map_category": "group:agriculture"
+}
+```
+
+Category IDs are the adapter's source and code, for example `nonponded:OR`,
+`ponded:rice_fl`, `native:riparian`, and `urban:urban`. They are case-sensitive.
+The configuration cannot define categories, column numbers, ordering, or
+irrigated status. Available IDs and their input columns/codes/legacy aliases
+are recorded in the configured manifest's `category_identity` table.
+
+`categories` may override only `label` and `color`. Missing labels use one
+unambiguous model description, otherwise neutral positional names such as
+Nonponded crop 3. Conflicting descriptions remain neutral; explicit labels
+override them. Missing colors use a deterministic ID-based palette, so
+renaming or reordering does not change color identity. Duplicate display labels
+are allowed and remain separate map/chart/CSV series.
+Colors apply to chart/legend series; the existing numerical map ramp is retained.
+
+Group IDs must be unique `group:` identifiers containing lowercase letters,
+digits, underscores, or hyphens. Each group needs a nonempty label, six-digit
+hex color, and a nonempty list of unique existing category IDs. Groups cannot
+contain other groups. Optional `chart_toggle` binds one group to an existing
+grouping control: `nonpondedgroup`, `rice`, `refuge`, or `native`; each control
+may be bound once. Groups without a binding can still be selected through the
+map/chart synchronization option. The initial map value must be an existing
+category or group ID. Unknown references/fields, duplicate group IDs/members,
+invalid colors, and invalid control bindings raise errors.
+
+Optional `minimum_members` sets the number of selected members required for
+checkbox-driven grouping (default 1). Optional `partial_label` names a partial
+selection, with its selected count appended; otherwise the group label is
+used. The C2VSimFG example requires two selected nonponded crops for grouping,
+preserving the individual name and color when only one is selected.
+
+For another supported v4.11 input set, change only the deck paths and JSON:
+
+```powershell
+& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\c2vsim_landuse_explorer_expanded.py build `
+	--reader iwfm-io --input $Inputs --output $Output --start-year 2019 --utm-zone 10 `
+	--rootzone-main $RootZone --preprocessor-main $Preprocessor `
+	--coverage-start 2018-10-01 --model-config $Configuration
+```
+
+Use the same standalone export commands above with either template. Configured
+CSV `category_codes` contains stable category IDs; labels remain display text.
+Configuration never changes acreage values, coverage, float32 storage, or the
+existing geometry denominator. The two templates and UI layout remain separate.
+
+### Category Data Flow
+
+- Adapter: verified `NCROP`/`CCODE` order or v4.11 slots define identity;
+	comments and budget-reporting order never define acreage columns.
+- SQLite: configured builds pack adapter order at the existing precision;
+	source widths and aggregation come from the verified category list.
+- Manifest: `codes` holds ordered IDs; labels/colors/groups are ID-keyed.
+	`model_configuration.category_identity` preserves input column/code identity.
+- Served/static/standalone readers: decode widths from the manifest, not the
+	legacy C2VSimFG lists. The standalone exporter needs no changes.
+- Controls and CSV: values and chart row keys use stable IDs; names are text.
+	Identical names cannot overwrite distinct series.
+
+The original `SOURCES`, C2VSimFG aliases/labels, and name-based group presets
+remain as no-config compatibility defaults. The separate raw templates retain
+those presets; shared hooks select ID-based configuration when present.
+Geographic names and page/export branding are not made configurable here.
