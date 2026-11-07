@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "model_title": "SVSim land use",
+  "export_filename_prefix": "SVSim_landuse",
+  "categories": {},
+  "groups": [],
+  "initial_map_category": "nonponded:GR"
+}
