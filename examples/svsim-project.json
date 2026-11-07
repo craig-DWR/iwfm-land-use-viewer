@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "reader": "iwfm-io",
+  "inputs": {
+    "rootzone_main": "PATH_TO_SVSIM_MODEL/Simulation/RootZone/SVSim_RootZone.dat",
+    "preprocessor_main": "PATH_TO_SVSIM_MODEL/PreProcessor/SVSim_Preprocessor.in",
+    "simulation_main": "PATH_TO_SVSIM_MODEL/Simulation/SVSim.in"
+  },
+  "presentation_config": "PATH_TO_PRESENTATION_CONFIG_JSON",
+  "map": {"start_year": 2000},
+  "coordinates": {
+    "datum": "NAD83",
+    "projection": "UTM",
+    "hemisphere": "north",
+    "zone": 10,
+    "units": "metres"
+  },
+  "units": {"model_area": "square_feet"},
+  "imagery": "current",
+  "output_html": "output/svsim-land-use.html"
+}

@@ -1,6 +1,87 @@
 # iwfm-land-use-viewer
 Build standalone interactive maps from IWFM land-use inputs. Initially developed for C2VSimFG.
 
+## One-Command Quick Start
+
+From the repository root, use Python 3.10 or newer in an isolated environment
+and install the pinned
+reader with `python -m pip install -r requirements-adapter.txt`.
+
+The example writes `output/svsim-land-use.html` beside your external project
+JSON; edit `output_html` to choose another location. Exports finish in a private
+temporary directory before publication. A failed export leaves an existing HTML
+unchanged and creates no partial file at the final path. Default no-overwrite
+publication is atomic and requires a filesystem supporting hard links (for
+example NTFS). If unsupported, it fails safely; choose a supported output
+filesystem or explicitly enable `overwrite`. Overwrite uses atomic replacement
+only after a successful export.
+
+Cleanup removes only temporary directories created by this command, never a
+user-supplied snapshot directory. A retained snapshot may contain intermediate
+build files after failure; inspect it or choose a new/empty directory before
+retrying. Conflicts that appear during preflight are rechecked before building.
+
+1. Copy `examples/svsim-project.json` to an external project folder as
+	 `project.json` and replace its input-path placeholders.
+2. Set `presentation_config` to `examples/svsim-presentation.json` in this
+	 checkout, an external copy, or your existing category/branding JSON. Paths
+	 here are relative to the project JSON, not to this checkout.
+3. Verify the coordinate/unit declarations for your deck and choose an external
+	 `output_html` path. The example's settings were verified for SVSim v1.0.
+
+From this repository, run:
+
+```powershell
+python build_viewer.py --config path/to/project.json
+```
+
+From another working directory, use the absolute path to `build_viewer.py`.
+All paths inside the JSON still resolve relative to that JSON file. Success
+prints the absolute finished HTML path. By default intermediate snapshot files
+are temporary and removed; the standalone HTML is the only retained output.
+
+### Project Settings
+
+- `version`: 1. `reader`: `iwfm-io`, using exactly 2.15.2. This convenience
+	command does not silently switch readers; existing legacy commands remain
+	unchanged and remain the default in the two original entry points.
+- `inputs.rootzone_main` and `inputs.preprocessor_main`: required input files.
+	Node, element, component, and area references are followed from these files.
+	Supply `inputs.simulation_main` for its verified `BDT`, or an explicit
+	top-level `coverage_start` ISO date/datetime or IWFM timestamp.
+- `inputs.zone_definition`: optional verified element-to-zone DAT or ZIP. Its
+	filename must contain `ZBudget` or `ZoneDef`, as required by the current build.
+	Omit it to leave subbasins off; model folders are not searched for zones.
+- `presentation_config`: required reference to the existing category/branding
+	schema. Its fields are not duplicated in the project schema.
+- `map.start_year`: required integer. Maps remain July 1 snapshots; the final
+	year is derived from common source coverage, not supplied or extended.
+- `coordinates`: explicitly declare `datum: NAD83`, `projection: UTM`,
+	`hemisphere: north`, integer `zone: 1..60`, and `units: metres`. This describes
+	the current GRS80 UTM-to-Web-Mercator geometry code, not a general CRS engine.
+	Verify the CRS using model documentation/GIS metadata; the command trusts
+	these explicit declarations rather than inferring them from model names.
+- `units.model_area`: `square_feet`. Preflight requires preprocessor
+	`UNITLTOU=FEET`, `FACTLTOU=1`, and a node factor near 3.28084 (tolerance 0.0001,
+	allowing the verified rounded 3.2808). Area `FACT` must be 1 or 43560. The
+	existing geometry-area denominator and snapshot precision are unchanged.
+- `imagery`: `current` or `historical-naip`, matching the shared renderer modes.
+- `output_html`: required .html/.htm path. Existing files are protected by
+	default. Set `overwrite: true` explicitly to replace an intended output.
+- `snapshot_directory`: optional new/empty directory for retaining SQLite,
+	manifest, and index files. Existing nonempty directories and output/input
+	collisions are rejected; omitted means temporary cleanup.
+
+Initial support is root-zone v4.11, inline nonrecurring acreage inputs, and
+the coordinate/unit settings above. Fractions (`FACT=0`), DSS, other factors,
+formats, projections, datums, hemispheres, and coordinate units are unsupported.
+Preflight validates file references, settings, coverage, presentation IDs, and
+output conflicts before the existing build/export workflow runs. No model
+simulation is executed. Network access is needed only for optional imagery.
+
+Keep project files with personal paths, real decks, retained snapshots, generated
+HTML, and comparison outputs outside this repository.
+
 ## Experimental Input Adapter
 
 `iwfm_input_adapter.py` is independently usable. Both viewer entry points now
@@ -21,7 +102,12 @@ diagnostics, not part of this test command.
 
 ```python
 from datetime import datetime
-from iwfm_input_adapter import C2VSIMFG_ALIASES, IWFMInputAdapter, UnitBasis
+From the repository root, use Python 3.10 or newer in an isolated environment
+and install the pinned reader with:
+
+```powershell
+python -m pip install -r requirements-adapter.txt
+```
 
 basis = UnitBasis.from_preprocessor(preprocessor_main_path)
 adapter = IWFMInputAdapter(
