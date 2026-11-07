@@ -67,6 +67,35 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(first['labels']['nonponded:OR'], 'Nonponded crop 1')
         self.assertEqual(first['category_colors'], second['category_colors'])
 
+    def test_optional_branding_and_default_compatibility(self):
+        default = resolve_configuration(self.config, self.categories)
+        self.assertNotIn('model_title', default)
+        self.assertNotIn('export_filename_prefix', default)
+        self.config.update(model_title='SVSim <land use> & inputs', export_filename_prefix='SVSim_landuse')
+        result = resolve_configuration(self.config, self.categories)
+        self.assertEqual(result['model_title'], 'SVSim <land use> & inputs')
+        self.assertEqual(result['export_filename_prefix'], 'SVSim_landuse')
+        self.assertEqual(result['codes'], default['codes'])
+
+    def test_invalid_filename_prefixes_are_rejected(self):
+        for prefix in ['', '../SVSim', 'folder/SVSim', 'folder\\SVSim', 'SVSim.csv', 'CON', 'LPT1', 'bad name', 'x' * 81, None]:
+            with self.subTest(prefix=prefix):
+                self.config['export_filename_prefix'] = prefix
+                with self.assertRaisesRegex(ValueError, 'export_filename_prefix'):
+                    resolve_configuration(self.config, self.categories)
+
+    def test_both_templates_use_safe_title_and_mapping_hooks(self):
+        import c2vsim_landuse_explorer_expanded as expanded
+        import c2vsim_landuse_explorer_naip as naip
+
+        for module in [expanded, naip]:
+            self.assertIn("document.querySelector('header h1').textContent=title", module.HTML)
+            self.assertIn('document.title=title', module.HTML)
+            self.assertIn('ctx.fillText(modelTitle()', module.HTML)
+            self.assertIn("return exportPrefix()+'_'", module.HTML)
+            self.assertIn("hasSubbasins()?basins.map", module.HTML)
+            self.assertIn("...(hasSubbasins()?['Subbasins: '", module.HTML)
+
     def test_small_deck_builds_with_config_and_labels_do_not_change_values(self):
         import test_iwfm_input_adapter as fixtures
         import c2vsim_landuse_explorer_expanded as viewer
