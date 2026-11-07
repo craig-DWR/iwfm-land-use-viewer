@@ -216,9 +216,16 @@ def aggregate_groups(conn, group):
 
 def build(args):
     indir, out = Path(args.input), Path(args.output)
+    adapter_build = None
+    if getattr(args, 'reader', 'legacy') == 'iwfm-io':
+        from iwfm_build import AdapterBuild
+        adapter_build = AdapterBuild(args)
     out.mkdir(parents=True,exist_ok=True)
-    paths = {s: choose(indir,stem) for s,(stem,_) in SOURCES.items()}
-    paths['nodes'] = choose(indir,'Nodes'); paths['elements'] = choose(indir,'Elements')
+    if adapter_build:
+        paths = adapter_build.paths
+    else:
+        paths = {s: choose(indir,stem) for s,(stem,_) in SOURCES.items()}
+        paths['nodes'] = choose(indir,'Nodes'); paths['elements'] = choose(indir,'Elements')
     print('Reading geometry...',flush=True)
     elems = geometry(paths['nodes'],paths['elements'])
     zones = [p for p in indir.iterdir() if p.suffix.lower() in ('.dat','.zip') and ('zbudget' in p.stem.lower() or 'zonedef' in p.stem.lower())]
@@ -233,7 +240,8 @@ def build(args):
     all_dates = {}
     for s in SOURCES:
         # Keep the preceding annual block, including March/September 1999.
-        all_dates[s] = parse_area(conn,s,paths[s],f'{args.start_year-1}-01-01',valid)
+        all_dates[s] = (adapter_build.parse_area(conn,s,f'{args.start_year-1}-01-01',valid,SOURCES[s][1])
+            if adapter_build else parse_area(conn,s,paths[s],f'{args.start_year-1}-01-01',valid))
         retained = [d for d in all_dates[s] if d >= f'{args.start_year-1}-01-01']
         for d in retained:
             count = conn.execute('SELECT COUNT(*) FROM areas WHERE source=? AND effective=?',(s,d)).fetchone()[0]
@@ -244,6 +252,7 @@ def build(args):
     max_year = 0  # Set from the final interval endpoints below.
     manifest={'start_year':args.start_year,'last_year':max_year,'count':len(elems),'utm_zone':args.utm_zone,'map_crs':'EPSG:3857','sources':{s:{'file':p.name,'sha256':hashfile(p)} for s,p in paths.items()},'subbasins':zone_names,'dates':{s:[d for d in ds if d>=f'{args.start_year-1}-01-01'] for s,ds in all_dates.items()},'codes':{s:c for s,(_,c) in SOURCES.items()},'labels':LABELS,'date_note':''}
     reconcile_dates(manifest); max_year = manifest['last_year']
+    if adapter_build: manifest['input_reader'] = adapter_build.metadata
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
     (out/'index.html').write_text(HTML,encoding='utf-8')
     conn.execute('ANALYZE'); conn.commit(); conn.close()
@@ -703,6 +712,8 @@ def export_web(args):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='action',required=True)
     b=sub.add_parser('build');b.add_argument('--input',required=True);b.add_argument('--output',required=True);b.add_argument('--start-year',type=int,default=2000);b.add_argument('--utm-zone',type=int,default=10,help='Input node UTM zone (default 10N for C2VSimFG)')
+    from iwfm_build import add_build_options
+    add_build_options(b)
     s=sub.add_parser('serve');s.add_argument('--output',required=True);s.add_argument('--port',type=int,default=8765)
     e=sub.add_parser('export-web');e.add_argument('--output',required=True,help='Built explorer snapshot');e.add_argument('--web-output',required=True,help='Destination static site directory')
     a=parser.parse_args(); {'build':build,'serve':serve,'export-web':export_web}[a.action](a)

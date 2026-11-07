@@ -3,8 +3,9 @@ Build standalone interactive maps from IWFM land-use inputs. Initially developed
 
 ## Experimental Input Adapter
 
-`iwfm_input_adapter.py` is independently usable and is not connected to either
-viewer entry point, the standalone exporter, or the existing build commands.
+`iwfm_input_adapter.py` is independently usable. Both viewer entry points now
+offer an opt-in adapter build; the default build still uses the legacy reader.
+The standalone exporter and viewer templates are unchanged.
 From the repository root, create a separate environment outside the repository.
 These PowerShell commands do not require activation or an execution-policy change:
 
@@ -85,3 +86,54 @@ this private-API contract; upgrades require rechecking it and the repo tests.
 Keep real model decks and comparison reports outside this repository. Tests
 generate small synthetic reader fixtures in temporary directories; they are
 not executable-certified IWFM models.
+
+## Opt-In C2VSimFG Build
+
+Install the pinned adapter requirements using the environment commands above.
+Set `$Model`, `$Inputs`, and `$Output` to external folders. `$Inputs` is the
+existing flat input folder used for legacy builds; both paths use any optional
+ZoneBudget definition found there. Opt-in geometry comes from the referenced
+preprocessor node/element files, not filename guessing.
+
+```powershell
+& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\c2vsim_landuse_explorer_expanded.py build `
+	--reader iwfm-io --input $Inputs --output $Output --start-year 2000 --utm-zone 10 `
+	--rootzone-main "$Model\Simulation\RootZone\C2VSimFG_RootZone.dat" `
+	--preprocessor-main "$Model\Preprocessor\C2VSimFG_Preprocessor.in" `
+	--simulation-main "$Model\Simulation\C2VSimFG.in"
+```
+
+The NAIP script accepts the same build options. Alternatively supply an
+authoritative `--coverage-start 1973-10-01` instead of `--simulation-main`.
+An explicit start takes precedence; otherwise the pinned direct simulation
+reader supplies `BDT` and verifies the referenced root-zone main. Never derive
+coverage start from an interval end. Coverage must include January 1 of the
+display start year, because that is the unchanged chart start.
+
+Omitting `--reader` (or using `--reader legacy`) keeps the original command,
+file discovery, reader, and standard-library-only dependencies. Unsupported
+opt-in inputs fail without falling back. This C2VSimFG build requires all four
+sources and the full known alias set; the standalone adapter remains more
+general. Acreage columns are explicitly mapped into legacy alias order.
+
+Opt-in builds preserve the existing geometry-area denominator, labels, groups,
+colors, July 1 date selection, January-of-prior-year retention threshold,
+float32 element values, and float64 regional aggregates. Source timelines stay
+separate; the annual map range uses the common final coverage, while histories
+can show later ponded intervals with blanks for sources that have ended.
+The manifest adds `input_reader` provenance, factors, and original timestamps;
+it does not change the snapshot schema or template data contract.
+
+Use separate output folders for legacy and opt-in comparisons. The existing
+standalone exporter accepts the adapter snapshot with either viewer template:
+
+```powershell
+& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\export_landuse_standalone.py `
+	--data $Output --viewer .\c2vsim_landuse_explorer_expanded.py --html $ExpandedHtml
+& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\export_landuse_standalone.py `
+	--data $Output --viewer .\c2vsim_landuse_explorer_naip.py --html $NaipHtml
+```
+
+Keep `$Output`, `$ExpandedHtml`, `$NaipHtml`, and all comparison reports outside
+the repository. The local v2.0 candidate is not authenticated as the exact deck
+used for the previously shared viewer; record its provenance separately.
