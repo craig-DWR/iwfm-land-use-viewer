@@ -61,6 +61,16 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual([category.id for category in original.categories], [category.id for category in renamed.categories])
         self.assertEqual([category.label for category in renamed.categories][:2], ['Shared name', 'Shared name'])
 
+    def test_conflicting_metadata_is_neutral_and_does_not_change_mapping(self):
+        path = self.directory / 'nonponded.dat'
+        path.write_text(path.read_text().replace('OR / CCODE[1]', 'OR / CCODE[1] Orchard')
+                       .replace('GR / CCODE[2]', 'GR / CCODE[2] Grain')
+                       .replace('OR / BCCODE[2]', 'OR / BCCODE[2] Conflicting name'), encoding='utf-8')
+        source = self.adapter().read_source('nonponded')
+        self.assertEqual([category.label for category in source.categories],
+                         ['Nonponded crop 1', 'Grain', 'Nonponded crop 3'])
+        self.assertEqual(source.values_at(datetime(2019, 7, 1)).loc[1].tolist(), [11, 22, 33])
+
     def test_exact_boundary_moves_to_next_block(self):
         source = self.adapter().read_source('nonponded')
         self.assertEqual(source.endpoints, ('09/30/2019_24:00', '09/30/2020_24:00'))

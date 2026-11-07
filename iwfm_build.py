@@ -1,5 +1,6 @@
 """Opt-in adapter ingestion for the existing C2VSimFG snapshot builders."""
 
+import json
 import struct
 from datetime import datetime
 from pathlib import Path
@@ -11,12 +12,13 @@ def add_build_options(parser):
     parser.add_argument('--preprocessor-main', help='Required with --reader iwfm-io')
     parser.add_argument('--simulation-main', help='Read coverage start from simulation BDT')
     parser.add_argument('--coverage-start', help='Explicit inclusive ISO date/datetime or IWFM timestamp')
+    parser.add_argument('--model-config', help='Presentation JSON; requires --reader iwfm-io')
 
 
-def store_source(connection, source, expected_aliases, min_date):
+def store_source(connection, source, expected_aliases, min_date, *, category_ids=False):
     from iwfm_input_adapter import InputValidationError
 
-    columns = {category.legacy_alias: category.id for category in source.categories}
+    columns = {(category.id if category_ids else category.legacy_alias): category.id for category in source.categories}
     if (None in columns or len(columns) != len(source.categories)
             or set(columns) != set(expected_aliases)):
         raise InputValidationError(
@@ -86,7 +88,12 @@ class AdapterBuild:
             unit_basis=UnitBasis.from_preprocessor(pp_path), coverage_start=start,
             legacy_aliases=C2VSIMFG_ALIASES,
         )
-        if set(self.adapter.sources) != {'nonponded', 'ponded', 'native', 'urban'}:
+        self.config = None
+        if getattr(args, 'model_config', None):
+            self.config = json.loads(Path(args.model_config).read_text(encoding='utf-8'))
+        self.codes = {}
+        self.categories = []
+        if self.config is None and set(self.adapter.sources) != {'nonponded', 'ponded', 'native', 'urban'}:
             raise InputValidationError('C2VSimFG viewer requires all four land-use components')
         self.paths = {'nodes': Path(pp.file_paths['node']), 'elements': element_path,
                       'rootzone_main': root, 'preprocessor_main': pp_path}
@@ -106,4 +113,13 @@ class AdapterBuild:
             'input_factor': source.input_factor, 'input_unit': source.input_unit,
             'original_endpoints': list(source.endpoints),
         }
-        return store_source(connection, source, aliases, min_date)
+        if self.config is not None:
+            aliases = [category.id for category in source.categories]
+            self.codes[name] = aliases
+            self.categories.extend(source.categories)
+        return store_source(connection, source, aliases, min_date, category_ids=self.config is not None)
+
+    def presentation(self):
+        from model_configuration import resolve_configuration
+
+        return resolve_configuration(self.config, self.categories)

@@ -199,11 +199,11 @@ def parse_area(conn, source, path, min_date, valid_ids):
     print(f'{source}: {len(dates)} update dates, {inserted:,} element records retained', flush=True)
     return dates
 
-def aggregate_groups(conn, group):
+def aggregate_groups(conn, group, source_codes=None):
     """Sum each source/date/category across member elements once per build."""
     table = 'region_areas' if group == 'region' else 'subbasin_areas'
     conn.execute(f'CREATE TABLE {table}(source TEXT, effective TEXT, {group} INTEGER, vals BLOB, PRIMARY KEY(source,effective,{group})) WITHOUT ROWID')
-    for source, (_, codes) in SOURCES.items():
+    for source, codes in (source_codes or {s:c for s,(_,c) in SOURCES.items()}).items():
         n = len(codes); fmt = '<' + 'f'*n
         for (effective,) in conn.execute('SELECT DISTINCT effective FROM areas WHERE source=? ORDER BY effective',(source,)):
             totals = {}
@@ -216,6 +216,8 @@ def aggregate_groups(conn, group):
 
 def build(args):
     indir, out = Path(args.input), Path(args.output)
+    if getattr(args, 'model_config', None) and getattr(args, 'reader', 'legacy') != 'iwfm-io':
+        raise ValueError('--model-config requires --reader iwfm-io')
     adapter_build = None
     if getattr(args, 'reader', 'legacy') == 'iwfm-io':
         from iwfm_build import AdapterBuild
@@ -238,7 +240,8 @@ def build(args):
     conn.executemany('INSERT INTO elements VALUES (?,?,?,?,?)',[(i,r,zone_by_element.get(i),a/4046.8564224,json.dumps([utm_to_web_mercator(x,y,args.utm_zone) for x,y in xy],separators=(',',':'))) for i,r,a,xy in elems])
     valid = {e[0] for e in elems}
     all_dates = {}
-    for s in SOURCES:
+    configured = adapter_build is not None and getattr(adapter_build, 'config', None) is not None
+    for s in (adapter_build.adapter.sources if configured else SOURCES):
         # Keep the preceding annual block, including March/September 1999.
         all_dates[s] = (adapter_build.parse_area(conn,s,f'{args.start_year-1}-01-01',valid,SOURCES[s][1])
             if adapter_build else parse_area(conn,s,paths[s],f'{args.start_year-1}-01-01',valid))
@@ -247,12 +250,18 @@ def build(args):
             count = conn.execute('SELECT COUNT(*) FROM areas WHERE source=? AND effective=?',(s,d)).fetchone()[0]
             if count != len(elems): raise ValueError(f'{s} {d}: {count} rows, expected {len(elems)}')
         conn.commit()
-    aggregate_groups(conn,'region')
-    if zones: aggregate_groups(conn,'subbasin')
+    codes = adapter_build.codes if configured else {s:c for s,(_,c) in SOURCES.items()}
+    aggregate_groups(conn,'region',codes)
+    if zones: aggregate_groups(conn,'subbasin',codes)
     max_year = 0  # Set from the final interval endpoints below.
     manifest={'start_year':args.start_year,'last_year':max_year,'count':len(elems),'utm_zone':args.utm_zone,'map_crs':'EPSG:3857','sources':{s:{'file':p.name,'sha256':hashfile(p)} for s,p in paths.items()},'subbasins':zone_names,'dates':{s:[d for d in ds if d>=f'{args.start_year-1}-01-01'] for s,ds in all_dates.items()},'codes':{s:c for s,(_,c) in SOURCES.items()},'labels':LABELS,'date_note':''}
     reconcile_dates(manifest); max_year = manifest['last_year']
     if adapter_build: manifest['input_reader'] = adapter_build.metadata
+    if configured:
+        presentation = adapter_build.presentation()
+        manifest['codes'] = codes
+        manifest['labels'] = presentation['labels']
+        manifest['model_configuration'] = presentation
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
     (out/'index.html').write_text(HTML,encoding='utf-8')
     conn.execute('ANALYZE'); conn.commit(); conn.close()
@@ -457,6 +466,9 @@ async function init(){manifest=applySubbasinNames(await api('/api/manifest'));ge
 init().catch(e=>{$('status').textContent='Error: '+e.message;console.error(e)});
 </script></html>'''
 
+from model_configuration import prepare_template
+HTML = prepare_template(HTML)
+
 def serve(args):
     out=Path(args.output); manifest=reconcile_dates(json.loads((out/'manifest.json').read_text()))
     db=out/'landuse.sqlite'
@@ -484,14 +496,14 @@ def serve(args):
                         mode=q.get('mode',['element'])[0]
                         if mode not in ('element','region','subbasin'): raise ValueError('Unknown mode')
                         if mode=='subbasin' and not manifest['subbasins']: raise ValueError('No subbasin zone file in snapshot')
-                        if not codes or any(c not in LABELS for c in codes): raise ValueError('Unknown map category')
+                        if not codes or any(c not in [c for cs in manifest['codes'].values() for c in cs] for c in codes): raise ValueError('Unknown map category')
                         result={}
                         group_field={'element':'id','region':'region','subbasin':'subbasin'}[mode]
                         acres=dict(conn.execute(f'SELECT {group_field},SUM(acres) FROM elements GROUP BY {group_field}')) if pct else {}
                         for s,d in active.items():
-                            indices=[SOURCES[s][1].index(c) for c in codes if c in SOURCES[s][1]]
+                            indices=[manifest['codes'][s].index(c) for c in codes if c in manifest['codes'][s]]
                             if not indices: continue
-                            n=len(SOURCES[s][1]); fmt='<' + ('f' if mode=='element' else 'd')*n
+                            n=len(manifest['codes'][s]); fmt='<' + ('f' if mode=='element' else 'd')*n
                             table,field={'element':('areas','element'),'region':('region_areas','region'),'subbasin':('subbasin_areas','subbasin')}[mode]
                             for eid,blob in conn.execute(f'SELECT {field},vals FROM {table} WHERE source=? AND effective=?',(s,d)):
                                 v=struct.unpack(fmt,blob)
@@ -506,7 +518,7 @@ def serve(args):
                         count,acres=conn.execute(f'SELECT COUNT(*),SUM(acres) FROM elements WHERE id IN ({placeholders})',ids).fetchone()
                         if count!=len(ids): raise ValueError('Unknown element in selection')
                         series={}
-                        for s,(_,codes) in SOURCES.items():
+                        for s,codes in manifest['codes'].items():
                             n=len(codes);fmt='<'+'f'*n;totals={}
                             for d,blob in conn.execute(f'SELECT effective,vals FROM areas WHERE source=? AND element IN ({placeholders}) ORDER BY effective',(s,*ids)):
                                 values=totals.setdefault(d,[0.0]*n)
@@ -522,8 +534,8 @@ def serve(args):
                         row=conn.execute(f'SELECT MIN(region),SUM(acres),COUNT(*) FROM elements WHERE {field}=?',(eid,)).fetchone()
                         if not row or not row[2]: raise ValueError('Unknown selection')
                         series={}
-                        for s in SOURCES:
-                            n=len(SOURCES[s][1]);fmt='<' + ('f' if not (is_region or is_subbasin) else 'd')*n
+                        for s in manifest['codes']:
+                            n=len(manifest['codes'][s]);fmt='<' + ('f' if not (is_region or is_subbasin) else 'd')*n
                             table,key=('subbasin_areas','subbasin') if is_subbasin else ('region_areas','region') if is_region else ('areas','element')
                             series[s]=[{'effective':d,'values':struct.unpack(fmt,b)} for d,b in conn.execute(f'SELECT effective,vals FROM {table} WHERE source=? AND {key}=? ORDER BY effective',(s,eid))]
                         periods=input_periods(manifest,active)
@@ -629,9 +641,9 @@ def export_web(args):
     geometry = [{'id':eid,'region':r,'subbasin':b,'acres':a,'xy':json.loads(xy)} for eid,r,b,a,xy in elements]
     (out/'geometry.json').write_text(json.dumps(geometry,separators=(',',':')),encoding='utf-8')
     (out/'manifest.json').write_text(json.dumps(manifest,separators=(',',':')),encoding='utf-8')
-    codes = list(SOURCES); width = sum(len(SOURCES[s][1]) for s in codes)
+    codes = list(manifest['codes']); width = sum(len(manifest['codes'][s]) for s in codes)
     offsets = {}; n=0
-    for s in codes: offsets[s]=n; n+=len(SOURCES[s][1])
+    for s in codes: offsets[s]=n; n+=len(manifest['codes'][s])
     for year in range(manifest['start_year'],manifest['last_year']+1):
         t=f'{year}-07-01'; data=bytearray(len(elements)*width*4)
         for s in codes:
@@ -647,7 +659,7 @@ def export_web(args):
         if mode=='subbasin' and not manifest.get('subbasins'):continue
         histories={}
         for source,effective,gid,blob in conn.execute(f'SELECT source,effective,{key},vals FROM {table} ORDER BY {key},source,effective'):
-            vals=struct.unpack('<'+'d'*len(SOURCES[source][1]),blob)
+            vals=struct.unpack('<'+'d'*len(manifest['codes'][source]),blob)
             histories.setdefault(gid,{}).setdefault(source,[]).append([effective,vals])
         with gzip.open(out/'history'/f'{mode}.json.gz','wt',encoding='utf-8',compresslevel=6) as f:
             json.dump(histories,f,separators=(',',':'))
@@ -660,7 +672,7 @@ def export_web(args):
         shard_id=ids[eid]//128
         if current!=shard_id:
             flush(current);shard={};current=shard_id
-        vals=struct.unpack('<'+'f'*len(SOURCES[source][1]),blob)
+        vals=struct.unpack('<'+'f'*len(manifest['codes'][source]),blob)
         shard.setdefault(eid,{}).setdefault(source,[]).append([effective,vals])
     flush(current);conn.close()
     old="async function api(path){let r=await fetch(path);if(!r.ok)throw Error(await r.text());return r.json()}"

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
+import re
 from typing import Mapping
 
 import numpy as np
@@ -164,7 +165,8 @@ class IWFMInputAdapter:
                 declaration.read_header()
                 count, keyword = declaration.read_keyed_int()
                 declaration.read_keyed_int()
-                declared_codes = [declaration.read_keyed_value()[0] for column in range(count)]
+                declared_entries = [declaration.read_keyed_value() for column in range(count)]
+                declared_codes = [code for code, description in declared_entries]
                 if count <= 0:
                     raise InputValidationError(f'{component_path}: NCROP={count}; require at least one category')
                 seen_codes = {}
@@ -177,13 +179,23 @@ class IWFMInputAdapter:
                             f'{component_path}: duplicate category codes {code!r} at CCODE[{previous}] and '
                             f'CCODE[{column}]; use unique codes (case-insensitive)')
                     seen_codes[code.casefold()] = column
+                declaration.read_keyed_value()
+                budget_count, keyword = declaration.read_keyed_int()
+                budget_entries = [declaration.read_keyed_value() for column in range(budget_count)]
+                name_candidates = {}
+                for code, description in declared_entries + budget_entries:
+                    name = re.sub(r'^B?CCODE\s*\[\s*\d+\s*\]\s*', '', description, flags=re.I).strip()
+                    if name:
+                        name_candidates.setdefault(code.casefold(), set()).add(name)
             component = read_component(component_path, n_elements=len(self.element_ids))
         if source == 'nonponded':
             codes = tuple(component.crop_codes)
             if not codes or len(codes) != component.n_crops:
                 raise InputValidationError(f'{component_path}: NCROP and ordered CCODE list disagree')
-            default_labels = {code: component.crop_names.get(code, '').strip() or
-                              f'Nonponded crop {column}' for column, code in enumerate(codes, 1)}
+            default_labels = {}
+            for column, code in enumerate(codes, 1):
+                names = name_candidates.get(code.casefold(), set())
+                default_labels[code] = next(iter(names)) if len(names) == 1 else f'Nonponded crop {column}'
         else:
             codes = tuple(code for code, label in FIXED_SLOTS[source])
             default_labels = dict(FIXED_SLOTS[source])
