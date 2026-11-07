@@ -26,7 +26,7 @@ def _label(value, context):
 def resolve_configuration(config, categories):
     if not isinstance(config, dict) or config.get('version') != 1:
         raise ValueError('Model configuration requires version=1')
-    unknown = set(config) - {'version', 'categories', 'groups', 'initial_map_category'}
+    unknown = set(config) - {'version', 'categories', 'groups', 'initial_map_category', 'model_title', 'export_filename_prefix'}
     if unknown:
         raise ValueError(f'Unknown model configuration fields: {sorted(unknown)}')
     definitions = config.get('categories', {})
@@ -81,12 +81,35 @@ def resolve_configuration(config, categories):
     initial = config.get('initial_map_category')
     if not isinstance(initial, str) or initial not in known | group_ids:
         raise ValueError(f'Unknown initial_map_category ID: {initial!r}')
-    return {'version': 1, 'codes': codes, 'labels': labels, 'category_colors': colors,
-            'category_identity': identity, 'groups': groups, 'initial_map_category': initial}
+    result = {'version': 1, 'codes': codes, 'labels': labels, 'category_colors': colors,
+              'category_identity': identity, 'groups': groups, 'initial_map_category': initial}
+    if 'model_title' in config:
+        result['model_title'] = _label(config['model_title'], 'model_title')
+    if 'export_filename_prefix' in config:
+        prefix = config['export_filename_prefix']
+        if (not isinstance(prefix, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}', prefix)
+                or re.fullmatch(r'CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]', prefix, re.I)):
+            raise ValueError('export_filename_prefix: use 1-80 ASCII letters/digits/underscores/hyphens, '
+                             'starting with a letter or digit; paths and reserved device names are not allowed')
+        result['export_filename_prefix'] = prefix
+    return result
 
 
 CONFIGURED_JS = r'''
 function htmlText(value){return String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}
+function modelTitle(){return manifest.model_configuration?.model_title||'C2VSimFG land use'}
+function exportPrefix(){return manifest.model_configuration?.export_filename_prefix||'C2VSimFG_landuse'}
+function hasSubbasins(){return Object.keys(manifest.subbasins||{}).length>0}
+function applyPresentation(){
+    const title=manifest.model_configuration?.model_title;
+    if(title){document.title=title;document.querySelector('header h1').textContent=title}
+    if(!hasSubbasins()){
+        const option=$('mode').querySelector('[value=subbasin]');option.hidden=true;option.style.display='none';option.disabled=true;
+        $('subbasinboundaries').checked=false;$('subbasinboundaries').disabled=true;
+        $('subbasinboundaries').closest('label').hidden=true;$('subbasinboundaries').closest('label').style.display='none';
+        $('subbasinreference').hidden=true;$('basincontext').hidden=true;
+    }
+}
 function configuredGroups(codes){
     const definitions=manifest.model_configuration.groups;
     const selected=definitions.find(group=>group.id===$('metric').value);
@@ -113,6 +136,12 @@ def prepare_template(html):
                 'function grouped(codes){': 'function grouped(codes){if(manifest.model_configuration)return configuredGroups(codes);',
                 'function seriesColor(g){': 'function seriesColor(g){if(manifest.model_configuration)return g.color||manifest.model_configuration.category_colors[g.id||g.codes[0]];',
                 "metric.value='All rice';syncChart();": "metric.value=manifest.model_configuration?manifest.model_configuration.initial_map_category:'All rice';syncChart();",
+                "manifest=applySubbasinNames(await api('/api/manifest'));": "manifest=applySubbasinNames(await api('/api/manifest'));applyPresentation();",
+                "const names=basins.map(id=>manifest.subbasins?.[id]||'Unassigned');": "const names=hasSubbasins()?basins.map(id=>manifest.subbasins?.[id]||'Unassigned'):[];",
+                "+' · Subbasin'+(info.names.length===1?'':'s')+': '+info.names.join('; ')": "+(hasSubbasins()?' · Subbasin'+(info.names.length===1?'':'s')+': '+info.names.join('; '):'')",
+                "return 'C2VSimFG_landuse_'+info.title": "return exportPrefix()+'_'+info.title",
+                "'Subbasins: '+info.names.join('; '),": "...(hasSubbasins()?['Subbasins: '+info.names.join('; ')]:[]),",
+                "ctx.fillText('C2VSimFG land use · '+info.title,margin,44)": "ctx.fillText(modelTitle()+' · '+info.title,margin,44)",
         }
         old = "groups['All nonponded crops']=manifest.codes.nonponded||[];groups['Total irrigated agriculture']=[...groups['All nonponded crops'].filter(c=>c!=='ID'),...groups['All rice']];let metric=$('metric');for(const g of ['Total irrigated agriculture','All nonponded crops','All rice','All refuge','Native + riparian vegetation'])metric.add(new Option(g,g));"
         new = "let metric=$('metric');if(manifest.model_configuration){for(const key of Object.keys(groups))delete groups[key];for(const group of manifest.model_configuration.groups){groups[group.id]=group.members;metric.add(new Option(group.label,group.id))}for(const toggle of ['nonpondedgroup','rice','refuge','native']){const group=manifest.model_configuration.groups.find(group=>group.chart_toggle===toggle);$(toggle).disabled=!group;if(group)$(toggle).parentElement.lastChild.textContent=' '+group.label}}else{" + old.replace("let metric=$('metric');", '') + '} '

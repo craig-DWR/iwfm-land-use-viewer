@@ -225,4 +225,65 @@ existing geometry denominator. The two templates and UI layout remain separate.
 The original `SOURCES`, C2VSimFG aliases/labels, and name-based group presets
 remain as no-config compatibility defaults. The separate raw templates retain
 those presets; shared hooks select ID-based configuration when present.
-Geographic names and page/export branding are not made configurable here.
+Geographic names still come from the optional zone mapping. Page/export branding
+can be overridden with the optional settings below.
+
+### Model Branding And Subbasins
+
+Two optional top-level JSON settings control presentation:
+
+- `model_title`: nonempty text used for the browser tab, page heading, and
+	chart-export title. It is rendered as literal text, never HTML.
+- `export_filename_prefix`: 1-80 ASCII letters, digits, underscores, or hyphens,
+	starting with a letter or digit. Paths, dots, spaces, and Windows device names
+	such as `CON` or `LPT1` are rejected. It prefixes CSV and PNG download names.
+
+Omit either setting to retain its current C2VSimFG default. Existing snapshots
+without these settings retain their original browser/page titles and filename
+prefix. The settings change no values, source intervals, or category identities.
+
+When the snapshot has no subbasin mapping, subbasin mode and boundary/reference
+controls are hidden, selection context omits subbasins, and chart exports omit
+the subbasin metadata line. The CSV column schema stays unchanged: subbasin
+values are blank. If a mapping is supplied, mapped names and genuinely
+unassigned elements retain their existing labels, controls, and CSV values.
+
+### SVSim Build Recipe
+
+A minimal external SVSim configuration is:
+
+```json
+{
+	"version": 1,
+	"model_title": "SVSim land use",
+	"export_filename_prefix": "SVSim_landuse",
+	"categories": {},
+	"groups": [],
+	"initial_map_category": "nonponded:GR"
+}
+```
+
+The existing SVSim configuration can retain its category/group definitions and
+add only the two branding settings. Replace the placeholder paths below; keep
+the JSON, snapshot, and HTML outside this repository. SVSim v1.0's node
+documentation and GIS projection metadata verify NAD83 UTM Zone 10N in metres.
+Using its root-zone input directory leaves subbasins off; do not add a zone file
+without verifying its element-to-zone mapping.
+
+```powershell
+$Model = 'PATH_TO_EXTRACTED_SVSIM_MODEL'
+$Configuration = 'PATH_TO_EXTERNAL_SVSIM_JSON'
+$Output = 'PATH_TO_EXTERNAL_SNAPSHOT'
+$Html = 'PATH_TO_EXTERNAL_SVSIM_HTML'
+& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\c2vsim_landuse_explorer_expanded.py build `
+	--reader iwfm-io --input "$Model\Simulation\RootZone" --output $Output `
+	--start-year 2000 --utm-zone 10 `
+	--rootzone-main "$Model\Simulation\RootZone\SVSim_RootZone.dat" `
+	--preprocessor-main "$Model\PreProcessor\SVSim_Preprocessor.in" `
+	--simulation-main "$Model\Simulation\SVSim.in" --model-config $Configuration
+& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\export_landuse_standalone.py `
+	--data $Output --viewer .\c2vsim_landuse_explorer_expanded.py --html $Html
+```
+
+For the NAIP variant, use `c2vsim_landuse_explorer_naip.py` as the export template
+and a separate external HTML path. The same branding and subbasin rules apply.
