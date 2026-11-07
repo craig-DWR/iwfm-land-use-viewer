@@ -7,6 +7,7 @@ This kit regenerates both self-contained HTML viewers with the latest review cha
 - `c2vsim_landuse_explorer_expanded.py` — builder, local server, and viewer template without the NAIP selector.
 - `c2vsim_landuse_explorer_naip.py` — equivalent builder/server/template with the NAIP selector.
 - `export_landuse_standalone.py` — compresses a built SQLite snapshot into one HTML file using either template.
+- `viewer_renderer.py`, `viewer_assets/base.html`, `viewer_assets/imagery.json`, and `model_configuration.py` — shared viewer rendering and presentation hooks required by both entry points and exporters. Keep both asset files in `viewer_assets/` beside the renderer; paths are resolved relative to the renderer, not the working directory.
 - This README.
 
 Use Python 3.10 or newer. Everything uses the Python standard library; no pip packages are required. On Windows, open PowerShell in this folder. If your computer uses `py` instead of `python`, substitute `py` in the commands.

@@ -287,3 +287,22 @@ $Html = 'PATH_TO_EXTERNAL_SVSIM_HTML'
 
 For the NAIP variant, use `c2vsim_landuse_explorer_naip.py` as the export template
 and a separate external HTML path. The same branding and subbasin rules apply.
+
+## Shared Viewer Renderer
+
+Both entry points expose the same `HTML` constant used by local serving,
+`export-web`, and the standalone exporter. It now comes from
+`viewer_renderer.render_viewer(imagery=...)` and shared `viewer_assets/` files.
+No CLI arguments or exporter interfaces changed.
+
+- `current` is the renderer default and the expanded entry point's mode:
+	current USGS imagery, without historical imagery controls.
+- `historical-naip` is the NAIP entry point's mode: current USGS, latest NAIP,
+	and the existing fixed-year choices, defaulting to NAIP 2022, with status/retry.
+
+The base markup, mapping, selection, chart, export, branding, and subbasin code
+are shared. Only imagery controls, attribution/help, tile handling, and event
+bindings vary. Model configuration is applied after imagery assembly, as before.
+Keep `viewer_renderer.py`, `viewer_assets/`, and `model_configuration.py` with
+the existing scripts. The renderer requires only the Python standard library;
+the optional input reader dependency remains opt-in.
