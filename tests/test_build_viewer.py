@@ -123,6 +123,29 @@ class ProjectTests(unittest.TestCase):
         self.config["coverage_start"] = "2018-10-01"
         self.config["map"]["start_year"] = 2019
 
+    def test_preflight_rejects_names_for_zones_not_in_definition(self):
+        from build_viewer import preflight
+
+        self.prepare_deck()
+        (self.directory / "ZoneDef_fixture.dat").write_text(
+            "1 / ZEXTENT\n1 Colusa County\n1 1\n2 1\n", encoding="utf-8"
+        )
+        self.config["inputs"]["zone_definition"] = "ZoneDef_fixture.dat"
+        presentation_path = self.directory / "presentation.json"
+        presentation = json.loads(presentation_path.read_text(encoding="utf-8"))
+        presentation["zones"] = {
+            "singular": "County",
+            "plural": "Counties",
+            "names": {"2": "Glenn County"},
+        }
+        presentation_path.write_text(json.dumps(presentation), encoding="utf-8")
+        project = self.load()
+        with self.assertRaisesRegex(
+            ProjectError, r"presentation_config:.*zones.names contains IDs.*2"
+        ):
+            preflight(project)
+        self.assertFalse(project.output_html.exists())
+
     def test_one_command_from_another_working_directory(self):
         self.prepare_deck()
         project = self.load()

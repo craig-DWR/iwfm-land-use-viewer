@@ -1,7 +1,15 @@
 """Presentation-only configuration keyed by verified adapter category IDs."""
 
 import hashlib
+import json
 import re
+from pathlib import Path
+
+LEGACY_ZONE_NAMES = json.loads(
+    (Path(__file__).resolve().with_name("subbasin_names.json")).read_text(
+        encoding="utf-8"
+    )
+)
 
 
 PALETTE = [
@@ -48,7 +56,107 @@ def _label(value, context):
     return value
 
 
-def resolve_configuration(config, categories):
+def resolve_zone_configuration(
+    definition=None,
+    *,
+    zone_ids=None,
+    zone_labels=None,
+    default_singular="Zone",
+    default_plural="Zones",
+):
+    if not isinstance(definition, dict):
+        raise ValueError("zones must be an object")
+    if set(definition) - {"singular", "plural", "names"}:
+        raise ValueError("zones: only singular, plural, and names are supported")
+    singular = _label(
+        definition.get("singular", default_singular), "zones.singular"
+    ).strip()
+    plural = _label(definition.get("plural", default_plural), "zones.plural").strip()
+    supplied = definition.get("names", {})
+    if not isinstance(supplied, dict):
+        raise ValueError("zones.names must be an object keyed by ZoneBudget zone ID")
+    configured = {}
+    for key, value in supplied.items():
+        if not isinstance(key, str) or not re.fullmatch(r"-?(?:0|[1-9]\d*)", key):
+            raise ValueError(
+                f"zones.names key {key!r} must be an integer ZoneBudget zone ID"
+            )
+        zone_id = int(key)
+        if zone_id == -99:
+            raise ValueError(
+                "zones.names cannot configure reserved unassigned zone -99"
+            )
+        configured[key] = _label(value, f"zones.names[{key!r}]").strip()
+    if zone_ids is None:
+        names = configured
+    else:
+        valid = {int(zone_id) for zone_id in zone_ids if int(zone_id) != -99}
+        unknown = set(configured) - {str(zone_id) for zone_id in valid}
+        if unknown:
+            raise ValueError(
+                f"zones.names contains IDs not declared or assigned by the ZoneBudget definition: {sorted(unknown)}"
+            )
+        labels = zone_labels or {}
+        names = {}
+        for zone_id in sorted(valid):
+            key = str(zone_id)
+            file_label = labels.get(zone_id, labels.get(key))
+            if (
+                not isinstance(file_label, str)
+                or not file_label.strip()
+                or file_label.strip() == key
+            ):
+                file_label = f"{singular} {zone_id}"
+            names[key] = configured.get(key, file_label.strip())
+        names["-99"] = "Unassigned (ZoneBudget -99)"
+    return {"singular": singular, "plural": plural, "names": names}
+
+
+def apply_legacy_zone_names(manifest):
+    """Apply the verified C2VSimFG v1.5 crosswalk to older snapshots only."""
+    configuration = manifest.get("model_configuration") or {}
+    if "zones" in configuration:
+        return manifest
+    source = (manifest.get("sources") or {}).get("subbasins") or {}
+    if Path(source.get("file", "")).stem.casefold() != "c2vsimfg_zbudget_gwsubbasins":
+        return manifest
+    names = {}
+    for zone_id, label in (manifest.get("subbasins") or {}).items():
+        if zone_id == "-99":
+            names[zone_id] = "Unassigned (ZoneBudget -99)"
+        elif label in LEGACY_ZONE_NAMES:
+            names[zone_id] = f"{LEGACY_ZONE_NAMES[label]} ({label})"
+        else:
+            names[zone_id] = label
+    manifest["zone_display"] = {
+        "singular": "Subbasin",
+        "plural": "Subbasins",
+        "names": names,
+    }
+    return manifest
+
+
+def legacy_c2_zone_settings(zone_definition, zone_labels):
+    if (
+        not zone_definition
+        or Path(zone_definition).stem.casefold() != "c2vsimfg_zbudget_gwsubbasins"
+    ):
+        return None
+    names = {}
+    for zone_id, label in (zone_labels or {}).items():
+        if int(zone_id) == -99 or not isinstance(label, str):
+            continue
+        names[str(zone_id)] = (
+            f"{LEGACY_ZONE_NAMES[label]} ({label})"
+            if label in LEGACY_ZONE_NAMES
+            else label
+        )
+    return {"singular": "Subbasin", "plural": "Subbasins", "names": names}
+
+
+def resolve_configuration(
+    config, categories, *, zone_ids=None, zone_labels=None, zone_definition=None
+):
     if not isinstance(config, dict) or config.get("version") != 1:
         raise ValueError("Model configuration requires version=1")
     unknown = set(config) - {
@@ -58,6 +166,7 @@ def resolve_configuration(config, categories):
         "initial_map_category",
         "model_title",
         "export_filename_prefix",
+        "zones",
     }
     if unknown:
         raise ValueError(f"Unknown model configuration fields: {sorted(unknown)}")
@@ -157,6 +266,11 @@ def resolve_configuration(config, categories):
     initial = config.get("initial_map_category")
     if not isinstance(initial, str) or initial not in known | group_ids:
         raise ValueError(f"Unknown initial_map_category ID: {initial!r}")
+    zone_configuration = config.get("zones")
+    if "zones" not in config:
+        zone_configuration = legacy_c2_zone_settings(zone_definition, zone_labels)
+    if zone_configuration is None:
+        zone_configuration = {}
     result = {
         "version": 1,
         "codes": codes,
@@ -165,6 +279,9 @@ def resolve_configuration(config, categories):
         "category_identity": identity,
         "groups": groups,
         "initial_map_category": initial,
+        "zones": resolve_zone_configuration(
+            zone_configuration, zone_ids=zone_ids, zone_labels=zone_labels
+        ),
     }
     if "model_title" in config:
         result["model_title"] = _label(config["model_title"], "model_title")
@@ -188,15 +305,36 @@ function htmlText(value){return String(value).replace(/[&<>"']/g,char=>({'&':'&a
 function modelTitle(){return manifest.model_configuration?.model_title||'C2VSimFG land use'}
 function exportPrefix(){return manifest.model_configuration?.export_filename_prefix||'C2VSimFG_landuse'}
 function hasSubbasins(){return Object.keys(manifest.subbasins||{}).length>0}
+function zoneConfiguration(){return manifest.model_configuration?.zones||manifest.zone_display||{singular:'Subbasin',plural:'Subbasins',names:{}}}
+function zoneName(id){
+    const key=String(id),configuration=manifest.model_configuration?.zones,display=zoneConfiguration(),fileLabel=manifest.subbasins?.[key];
+    if(key==='-99')return fileLabel||'Unassigned (ZoneBudget -99)';
+    if(configuration?.names?.[key])return configuration.names[key];
+    return display.names?.[key]||fileLabel||`${display.singular||'Zone'} ${key}`;
+}
+function zoneTitle(id){
+    const key=String(id),name=zoneName(key),term=zoneConfiguration().singular.toLowerCase(),lower=name.toLowerCase();
+    if(key==='-99'||lower.startsWith(term+' ')||lower.endsWith(' '+term))return name;
+    return `${zoneConfiguration().singular} ${name}`;
+}
+function applyZonePresentation(){
+    const display=zoneConfiguration(),option=$('mode').querySelector('[value=subbasin]');
+    if(!hasSubbasins()){
+        option.hidden=true;option.style.display='none';option.disabled=true;
+        $('subbasinboundaries').checked=false;$('subbasinboundaries').disabled=true;
+        $('subbasinboundaries').closest('label').hidden=true;$('subbasinboundaries').closest('label').style.display='none';$('subbasinreference').hidden=true;$('basincontext').hidden=true;
+        return;
+    }
+    option.hidden=false;option.style.display='';option.disabled=false;option.textContent=display.singular;
+    $('zoneBoundaryLabel').textContent=`Show ${display.singular} boundaries`;
+    $('zoneReferenceLabel').textContent=display.singular;
+    $('zoneJumpPlaceholder').textContent=`Choose a ${display.singular.toLowerCase()}`;
+    if($('zoneHelpPlural'))$('zoneHelpPlural').textContent=display.plural.toLowerCase();
+    $('subbasinboundaries').disabled=false;$('subbasinboundaries').closest('label').hidden=false;$('subbasinboundaries').closest('label').style.display='';
+}
 function applyPresentation(){
     const title=manifest.model_configuration?.model_title;
     if(title){document.title=title;document.querySelector('header h1').textContent=title}
-    if(!hasSubbasins()){
-        const option=$('mode').querySelector('[value=subbasin]');option.hidden=true;option.style.display='none';option.disabled=true;
-        $('subbasinboundaries').checked=false;$('subbasinboundaries').disabled=true;
-        $('subbasinboundaries').closest('label').hidden=true;$('subbasinboundaries').closest('label').style.display='none';
-        $('subbasinreference').hidden=true;$('basincontext').hidden=true;
-    }
 }
 function configuredGroups(codes){
     const definitions=manifest.model_configuration.groups;
@@ -224,12 +362,30 @@ def prepare_template(html):
         "function grouped(codes){": "function grouped(codes){if(manifest.model_configuration)return configuredGroups(codes);",
         "function seriesColor(g){": "function seriesColor(g){if(manifest.model_configuration)return g.color||manifest.model_configuration.category_colors[g.id||g.codes[0]];",
         "metric.value='All rice';syncChart();": "metric.value=manifest.model_configuration?manifest.model_configuration.initial_map_category:'All rice';syncChart();",
-        "manifest=applySubbasinNames(await api('/api/manifest'));": "manifest=applySubbasinNames(await api('/api/manifest'));applyPresentation();",
-        "const names=basins.map(id=>manifest.subbasins?.[id]||'Unassigned');": "const names=hasSubbasins()?basins.map(id=>manifest.subbasins?.[id]||'Unassigned'):[];",
-        "+' · Subbasin'+(info.names.length===1?'':'s')+': '+info.names.join('; ')": "+(hasSubbasins()?' · Subbasin'+(info.names.length===1?'':'s')+': '+info.names.join('; '):'')",
+        "manifest=applySubbasinNames(await api('/api/manifest'));": "manifest=await api('/api/manifest');applyZonePresentation();applyPresentation();",
+        "Object.entries(manifest.subbasins||{}).find(([id,name])=>name===raw||manifest.subbasin_ids?.[id]===raw)": "Object.entries(manifest.subbasins||{}).find(([id,name])=>zoneName(id)===raw||name===raw||id===raw||manifest.subbasin_ids?.[id]===raw)",
+        "function selectionLabel(){return mode()==='region'?'subregion':mode()==='subbasin'?'subbasin':selectedIds.size>1?'selected elements':'element'}": "function selectionLabel(){return mode()==='region'?'subregion':mode()==='subbasin'?zoneConfiguration().singular.toLowerCase():selectedIds.size>1?'selected elements':'element'}",
+        "const names=basins.map(id=>manifest.subbasins?.[id]||'Unassigned');": "const names=hasSubbasins()?basins.map(zoneName):[];",
+        "+' · Subbasin'+(info.names.length===1?'':'s')+': '+info.names.join('; ')": "+(hasSubbasins()?' · '+zoneConfiguration().plural+': '+info.names.join('; '):'')",
+        "const title=m==='region'?'Subregion '+d.selectionKey:m==='subbasin'?'Subbasin '+(manifest.subbasins[d.selectionKey]||d.selectionKey):elementIds.length===1?'Element '+elementIds[0]:elementIds.length+' selected elements';": "const title=m==='region'?'Subregion '+d.selectionKey:m==='subbasin'?zoneTitle(d.selectionKey):elementIds.length===1?'Element '+elementIds[0]:elementIds.length+' selected elements';",
+        "if(!info){$('selectioncontext').textContent='';$('basincontext').textContent='Select a subbasin to see its subregions.';$('subbasinjump').value='';return}": "if(!info){$('selectioncontext').textContent='';$('basincontext').textContent='Select a '+zoneConfiguration().singular.toLowerCase()+' to see its subregions.';$('subbasinjump').value='';return}",
+        "$('subbasinjump').value=basinMode?String(selectedData.selectionKey):'';if(basinMode)$('goto').value=manifest.subbasins[selectedData.selectionKey];": "$('subbasinjump').value=basinMode?String(selectedData.selectionKey):'';if(basinMode)$('goto').value=zoneName(selectedData.selectionKey);",
+        "Object.values(manifest.subbasins||{}).sort((a,b)=>a.localeCompare(b))": "Object.keys(manifest.subbasins||{}).map(zoneName).sort((a,b)=>a.localeCompare(b))",
+        "const label=currentMode==='element'?'element':currentMode==='region'?'subregion':'subbasin';": "const label=currentMode==='element'?'element':currentMode==='region'?'subregion':zoneConfiguration().singular.toLowerCase();",
+        "field.placeholder=currentMode==='subbasin'?'Type or choose a subbasin':'Type or choose '+(currentMode==='element'?'an element ID':'a subregion number');": "field.placeholder=currentMode==='subbasin'?'Type or choose a '+zoneConfiguration().singular.toLowerCase():'Type or choose '+(currentMode==='element'?'an element ID':'a subregion number');",
+        "manifest.subbasins[a[0]].localeCompare(manifest.subbasins[b[0]])": "zoneName(a[0]).localeCompare(zoneName(b[0]))",
+        "manifest.subbasins[id]+' · Subregions '": "zoneName(id)+' · Subregions '",
+        "if(!manifest.subbasins?.[g.subbasin])continue;": "if(g.subbasin===null||g.subbasin===undefined)continue;",
+        "$('goto').value=manifest.subbasins[$('subbasinjump').value]": "$('goto').value=zoneName($('subbasinjump').value)",
+        "(mode()==='subbasin'?'Subbasin '+d.name:'Subregion '+id)": "(mode()==='subbasin'?zoneTitle(id):'Subregion '+id)",
+        "mode()==='subbasin'?'Subbasin '+manifest.subbasins[g.subbasin]": "mode()==='subbasin'?zoneTitle(g.subbasin)",
+        '<option value="subbasin">Subbasin</option>': '<option value="subbasin">Zone</option>',
+        '<label><input id="subbasinboundaries" type="checkbox"> Show subbasin boundaries</label>': '<label><input id="subbasinboundaries" type="checkbox"> <span id="zoneBoundaryLabel">Show zones boundaries</span></label>',
+        '<label>Subbasin <select id="subbasinjump"><option value="">Choose a subbasin</option></select></label>': '<label><span id="zoneReferenceLabel">Zone</span> <select id="subbasinjump"><option id="zoneJumpPlaceholder" value="">Choose a zone</option></select></label>',
         "return 'C2VSimFG_landuse_'+info.title": "return exportPrefix()+'_'+info.title",
-        "'Subbasins: '+info.names.join('; '),": "...(hasSubbasins()?['Subbasins: '+info.names.join('; ')]:[]),",
+        "'Subbasins: '+info.names.join('; '),": "...(hasSubbasins()?[zoneConfiguration().plural+': '+info.names.join('; ')]:[]),",
         "ctx.fillText('C2VSimFG land use · '+info.title,margin,44)": "ctx.fillText(modelTitle()+' · '+info.title,margin,44)",
+        "${selectionLabel()}": "${htmlText(selectionLabel())}",
     }
     old = "groups['All nonponded crops']=manifest.codes.nonponded||[];groups['Total irrigated agriculture']=[...groups['All nonponded crops'].filter(c=>c!=='ID'),...groups['All rice']];let metric=$('metric');for(const g of ['Total irrigated agriculture','All nonponded crops','All rice','All refuge','Native + riparian vegetation'])metric.add(new Option(g,g));"
     new = (
@@ -238,6 +394,15 @@ def prepare_template(html):
         + "} "
     )
     replacements[old] = new
+    reference_visibility = "$('subbasinreference').hidden=mode()!=='subbasin';"
+    if html.count(reference_visibility) != 2:
+        raise ValueError(
+            "Unsupported viewer template subbasin-reference visibility markers"
+        )
+    html = html.replace(
+        reference_visibility,
+        "$('subbasinreference').hidden=mode()!=='subbasin'||!hasSubbasins();",
+    )
     for old, new in replacements.items():
         if html.count(old) != 1:
             raise ValueError(f"Unsupported viewer template marker: {old[:60]}")

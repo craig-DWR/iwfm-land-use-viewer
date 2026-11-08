@@ -24,7 +24,7 @@ viewer settings, you can reuse them.
   Keep the extracted folder together. Git and VS Code are not required.
 - Viewer settings: a **settings file (project.json)** and the presentation file
   it references. Use the files someone sent you, or start with an example below.
-  If saved settings use subbasins, also have that definition file available.
+  If saved settings use ZoneBudget zones, also have that definition file available.
 
 **The HTML viewer is the finished output. You don't need the old HTML to build
 a new one, and the HTML by itself isn't enough to rebuild.**
@@ -99,7 +99,7 @@ files. Keep the two settings files together. Then follow the build command below
 
 Each pair has a project settings file and its matching presentation file. The
 presentation reference already works when the pair is copied together, even
-if you rename the project file to project.json. The examples need no subbasin
+if you rename the project file to project.json. The examples need no ZoneBudget
 definition. Do not mix pairs or assume their crop groups, coordinates, or file
 layouts fit another model.
 
@@ -118,6 +118,24 @@ display year 2000, current imagery, and crop groups can remain as supplied.
 The output is `output/c2vsimfg-v1.5-land-use.html` under your project folder.
 Use a new output name if it already exists, then go to
 [C. Build and open the viewer](#c-build-and-open-the-viewer).
+
+#### Optional ZoneBudget zones
+
+With no ZoneBudget file, the viewer explores by Element or Subregion. To use
+zones, add `zone_definition` inside `inputs` in project.json, for example:
+
+```json
+"zone_definition": "PATH_TO_MODEL/ZoneBudget/ZBudget_Counties.DAT"
+```
+
+A custom type such as County replaces the Subbasin option; it does not add a
+fourth mode. Use a horizontal definition (`ZEXTENT=1`) with at most one zone
+assignment per element. The viewer sums whole-element acreage, so it cannot use
+layer-varying zones or split an element across boundaries. For a layered budget,
+create a separate horizontal definition. Set the display terms and names in the
+presentation file; see the [worked ZoneBudget example](README_landuse_regeneration.md#configurable-zonebudget-zones).
+The C2VSimFG example's DWR names match its standard v1.5 definition only; update
+or remove those names if you use a different assignment file.
 
 #### SVSim v1.0
 

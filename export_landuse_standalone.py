@@ -77,7 +77,7 @@ async function api(path){
   if(match){
     const mode=match[1],id=Number(match[2]),info=embeddedAreas[mode].get(id);if(!info)throw Error('Unknown selection');
     const result=await embeddedDetail(info.ids,u.searchParams.get('year'));
-    return {...result,id,region:`Subregion ${info.region}`,name:mode==='subbasin'?manifest.subbasins[id]:null};
+    return {...result,id,region:`Subregion ${info.region}`,name:mode==='subbasin'?zoneName(id):null};
   }
   throw Error('Unknown data path: '+path);
 }

@@ -135,8 +135,12 @@ class ConfigurationTests(unittest.TestCase):
             self.assertIn("document.title=title", module.HTML)
             self.assertIn("ctx.fillText(modelTitle()", module.HTML)
             self.assertIn("return exportPrefix()+'_'", module.HTML)
-            self.assertIn("hasSubbasins()?basins.map", module.HTML)
-            self.assertIn("...(hasSubbasins()?['Subbasins: '", module.HTML)
+            self.assertIn("hasSubbasins()?basins.map(zoneName):[]", module.HTML)
+            self.assertIn(
+                "...(hasSubbasins()?[zoneConfiguration().plural+': '+info.names.join('; ')]:[])",
+                module.HTML,
+            )
+            self.assertIn("htmlText(selectionLabel())", module.HTML)
 
     def test_small_deck_builds_with_config_and_labels_do_not_change_values(self):
         import test_iwfm_input_adapter as fixtures

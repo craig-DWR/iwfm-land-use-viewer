@@ -192,7 +192,13 @@ class AdapterBuild:
             connection, source, aliases, min_date, category_ids=self.config is not None
         )
 
-    def presentation(self):
+    def presentation(self, *, zone_ids=None, zone_labels=None, zone_definition=None):
         from model_configuration import resolve_configuration
 
-        return resolve_configuration(self.config, self.categories)
+        return resolve_configuration(
+            self.config,
+            self.categories,
+            zone_ids=zone_ids,
+            zone_labels=zone_labels,
+            zone_definition=zone_definition,
+        )

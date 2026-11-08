@@ -9,15 +9,6 @@ function featureId(g){return mode()==='region'?g.region:mode()==='subbasin'?g.su
 function selectionLabel(){return mode()==='region'?'subregion':mode()==='subbasin'?'subbasin':selectedIds.size>1?'selected elements':'element'}
 const groups={'Total irrigated agriculture':[],'All nonponded crops':[],'All rice':['RI_FL','RI_NFL','RI_NDC'],'All refuge':['RF_SL','RF_PR'],'Native + riparian vegetation':['NV','RV']};
 const categoryColors=['#137f8b','#d35a49','#9472ad','#b48b31','#537db5','#4e9a68','#ae6688','#6d7690','#d07e48','#718b47','#435ba8','#8c564b','#a54370','#467b96','#806930','#396f45','#ad6a1d','#7b4d9c','#a54b3d','#526f70','#337e95','#239d87','#427d61','#7955a1','#a75b99','#698c40','#9c7939','#626a79'];// Stable colors use category identity, rather than its position among visible series.
-// Names from DWR Bulletin 118 basin feature service, retrieved October 14, 2026.
-const basinNameByCode = {"2-003": "Suisun-Fairfield Valley", "2-004": "Pittsburg Plain", "2-005": "Clayton Valley", "2-006": "Ygnacio Valley", "2-031": "Arroyo del Hambre Valley", "5-006.01": "Bowman", "5-006.03": "Anderson", "5-006.04": "Enterprise", "5-006.05": "Millville", "5-006.06": "South Battle Creek", "5-021.50": "Red Bluff", "5-021.51": "Corning", "5-021.52": "Colusa", "5-021.53": "Bend", "5-021.54": "Antelope", "5-021.56": "Los Molinos", "5-021.57": "Vina", "5-021.60": "North Yuba", "5-021.61": "South Yuba", "5-021.62": "Sutter", "5-021.64": "North American", "5-021.65": "South American", "5-021.66": "Solano", "5-021.67": "Yolo", "5-021.69": "Wyandotte Creek", "5-021.70": "Butte", "5-022.01": "Eastern San Joaquin", "5-022.02": "Modesto", "5-022.03": "Turlock", "5-022.04": "Merced", "5-022.05": "Chowchilla", "5-022.06": "Madera", "5-022.07": "Delta-Mendota", "5-022.08": "Kings", "5-022.09": "Westside", "5-022.10": "Pleasant Valley", "5-022.11": "Kaweah", "5-022.12": "Tulare Lake", "5-022.13": "Tule", "5-022.14": "Kern County", "5-022.15": "Tracy", "5-022.16": "Cosumnes", "5-022.17": "Kettleman Plain", "5-022.18": "White Wolf", "5-022.19": "East Contra Costa"};
-function applySubbasinNames(data){
-  const ids=data.subbasin_ids||{...data.subbasins};
-  data.subbasin_ids=ids;
-  data.subbasins=Object.fromEntries(Object.entries(data.subbasins||{}).map(([id,label])=>{
-    const code=ids[id],name=basinNameByCode[code];return [id,name?`${name} (${code})`:label];
-  }));return data;
-}
 const groupColors={'All rice':'#137f8b','All refuge':'#9472ad','All nonponded crops':'#b48b31','Native + riparian vegetation':'#4e9a68','Total irrigated agriculture':'#267747'};
 function seriesColor(g){
   if(groupColors[g.name])return groupColors[g.name];
