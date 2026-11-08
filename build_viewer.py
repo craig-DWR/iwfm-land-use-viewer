@@ -298,6 +298,9 @@ def preflight(project):
                 prepared.adapter.rootzone.file_paths.get(role),
                 f"inputs.rootzone_main references {source}",
             )
+            if source == "nonponded":
+                context = "nonponded crop input"
+                prepared.adapter.validate_nonponded_codes()
             context = (
                 f"inputs.rootzone_main references {source} component {component_path}"
             )
