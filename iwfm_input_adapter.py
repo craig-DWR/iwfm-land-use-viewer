@@ -210,6 +210,39 @@ class IWFMInputAdapter:
             raise InputValidationError(f"{description}: input file unavailable: {path}")
         return path.resolve()
 
+    def _read_nonponded_declaration(self, component_path):
+        declaration = IWFMFileReader(component_path)
+        declaration.read_header()
+        count, keyword = declaration.read_keyed_int()
+        declaration.read_keyed_int()
+        declared_entries = [declaration.read_keyed_value() for column in range(count)]
+        declared_codes = [code for code, description in declared_entries]
+        if count <= 0:
+            raise InputValidationError(
+                f"{component_path}: NCROP={count}; require at least one category"
+            )
+        seen_codes = {}
+        for column, code in enumerate(declared_codes, 1):
+            if not code.strip():
+                raise InputValidationError(
+                    f"{component_path}: CCODE[{column}] is blank; supply a unique code"
+                )
+            if code.casefold() in seen_codes:
+                previous = seen_codes[code.casefold()]
+                raise InputValidationError(
+                    f"{component_path}: duplicate category codes {code!r} at CCODE[{previous}] and "
+                    f"CCODE[{column}]; use unique codes (case-insensitive)"
+                )
+            seen_codes[code.casefold()] = column
+        return declaration, declared_entries
+
+    def validate_nonponded_codes(self):
+        """Validate declared CCODEs before iwfm-io reads the component."""
+        role, _ = SOURCE_READERS["nonponded"]
+        component_path = self._path(self.rootzone.file_paths.get(role), "nonponded")
+        with strict_mode(True):
+            self._read_nonponded_declaration(component_path)
+
     def read_source(self, source: str) -> LandUseSource:
         """Keep one source's column identities and timeline separate from other sources."""
         if source not in SOURCE_READERS:
@@ -218,31 +251,9 @@ class IWFMInputAdapter:
         component_path = self._path(self.rootzone.file_paths.get(role), source)
         with strict_mode(True):
             if source == "nonponded":
-                declaration = IWFMFileReader(component_path)
-                declaration.read_header()
-                count, keyword = declaration.read_keyed_int()
-                declaration.read_keyed_int()
-                declared_entries = [
-                    declaration.read_keyed_value() for column in range(count)
-                ]
-                declared_codes = [code for code, description in declared_entries]
-                if count <= 0:
-                    raise InputValidationError(
-                        f"{component_path}: NCROP={count}; require at least one category"
-                    )
-                seen_codes = {}
-                for column, code in enumerate(declared_codes, 1):
-                    if not code.strip():
-                        raise InputValidationError(
-                            f"{component_path}: CCODE[{column}] is blank; supply a unique code"
-                        )
-                    if code.casefold() in seen_codes:
-                        previous = seen_codes[code.casefold()]
-                        raise InputValidationError(
-                            f"{component_path}: duplicate category codes {code!r} at CCODE[{previous}] and "
-                            f"CCODE[{column}]; use unique codes (case-insensitive)"
-                        )
-                    seen_codes[code.casefold()] = column
+                declaration, declared_entries = self._read_nonponded_declaration(
+                    component_path
+                )
                 declaration.read_keyed_value()
                 budget_count, keyword = declaration.read_keyed_int()
                 budget_entries = [

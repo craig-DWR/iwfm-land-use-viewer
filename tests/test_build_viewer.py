@@ -177,6 +177,31 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual((manifest["start_year"], manifest["last_year"]), (2019, 2019))
         self.assertFalse(list(project.output_html.parent.glob(".iwfm-viewer-export-*")))
 
+    def test_one_command_preflight_rejects_duplicate_nonponded_crop_code(self):
+        self.prepare_deck()
+        component = self.directory / "nonponded.dat"
+        component.write_text(
+            component.read_text(encoding="utf-8").replace(
+                "GR / CCODE[2]", "OR / CCODE[2]"
+            ),
+            encoding="utf-8",
+        )
+        project = self.load()
+        command = Path(__file__).resolve().parents[1] / "build_viewer.py"
+        result = subprocess.run(
+            [sys.executable, "-B", str(command), "--config", str(self.path)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(
+            f"build_viewer: nonponded crop input: {component}: duplicate category codes 'OR' "
+            "at CCODE[1] and CCODE[2]; use unique codes (case-insensitive)",
+            result.stderr,
+        )
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(project.output_html.exists())
+
     def test_requested_snapshot_is_retained(self):
         from build_viewer import build_project
 
