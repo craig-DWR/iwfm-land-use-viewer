@@ -72,6 +72,38 @@ labels change. Check group membership explicitly; do not infer irrigation or
 idle status from display text. Keep commands/defaults unless the task explicitly
 changes them. Leave automated formatting to its own PR.
 
+## Format Python Code
+
+From PowerShell in the repository root, install the development-only formatter
+in an external environment. This does not install IWFM readers or plotting
+packages, and viewers do not need Ruff to run:
+
+```powershell
+$FormatEnvironment = Join-Path $env:LOCALAPPDATA 'IWFM-Land-Use-Viewer/formatter-env'
+python -m venv $FormatEnvironment
+$FormatPython = Join-Path $FormatEnvironment 'Scripts/python.exe'
+& $FormatPython -m pip install -r .\requirements-dev.txt
+```
+
+Format Python source and tests, or check without editing files:
+
+```powershell
+& $FormatPython -m ruff format .
+& $FormatPython -m ruff format --check .
+```
+
+[pyproject.toml](pyproject.toml) limits discovery to Python files and sets the
+supported Python floor. [requirements-dev.txt](requirements-dev.txt) pins the
+same Ruff version used by the pull-request formatting workflow. HTML,
+JavaScript, JSON, and generated outputs are not formatting targets. Embedded
+HTML/JavaScript strings must remain identical; do not enable docstring-code
+formatting or apply lint autofixes as part of a formatting change.
+
+If the PR check fails, run the format command above, review the resulting diff,
+run the check again, and run the repository tests. Include only intended Python
+formatting changes. No VS Code extension or format-on-save setting is required.
+Ruff is a formatter here; this workflow introduces no lint gate.
+
 If using Git, inspect `git status --short` and `git diff --check` before staging;
 stage only intended source, tests, examples, and documentation. Do not commit
 real model inputs or generated viewer outputs. Read

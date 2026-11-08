@@ -1,0 +1,8 @@
+[tool.ruff]
+required-version = "==0.14.3"
+target-version = "py310"
+line-length = 88
+include = ["*.py"]
+
+[tool.ruff.format]
+docstring-code-format = false
