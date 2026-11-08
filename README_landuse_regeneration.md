@@ -9,8 +9,9 @@ command syntax, not a recommendation to commit model data or outputs.
 
 ## Files to keep together
 
-- `c2vsim_landuse_explorer_expanded.py` — builder, local server, and viewer template without the NAIP selector.
-- `c2vsim_landuse_explorer_naip.py` — equivalent builder/server/template with the NAIP selector.
+- `landuse_viewer_backend.py` — shared build, local-server, and static-export implementation.
+- `c2vsim_landuse_explorer_expanded.py` — current-imagery compatibility script; keeps the original build, serve, and export-web commands and exposes current-mode `HTML`.
+- `c2vsim_landuse_explorer_naip.py` — historical-NAIP compatibility script; keeps the same commands and exposes historical-mode `HTML`.
 - `export_landuse_standalone.py` — compresses a built SQLite snapshot into one HTML file using either template.
 - `viewer_renderer.py`, `viewer_assets/base.html`, `viewer_assets/imagery.json`, and `model_configuration.py` — shared viewer rendering and presentation hooks required by both entry points and exporters. Keep both asset files in `viewer_assets/` beside the renderer; paths are resolved relative to the renderer, not the working directory.
 - This README.
@@ -23,7 +24,7 @@ folder. If Python is installed as `py`, substitute `py -3` in Python commands.
 
 ## Regenerate HTML from an existing database
 
-Place your built snapshot folder beside the three scripts. The commands below assume it is called `landuse_explorer_new` and contains both `landuse.sqlite` and its matching `manifest.json`. The existing `index.html` is not used by the standalone exporter.
+Place your built snapshot folder beside the repository scripts. The commands below assume it is called `landuse_explorer_new` and contains both `landuse.sqlite` and its matching `manifest.json`. The existing `index.html` is not used by the standalone exporter.
 
 ```powershell
 python .\export_landuse_standalone.py --data .\landuse_explorer_new --viewer .\c2vsim_landuse_explorer_expanded.py --html .\C2VSimFG_landuse_standalone.html
