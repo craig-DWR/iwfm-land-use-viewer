@@ -86,6 +86,7 @@ def encode(b):
     return base64.b64encode(gzip.compress(b,compresslevel=9,mtime=0)).decode('ascii')
 
 def export(data,viewer,html):
+    """Embed retained input histories rather than replacing them with July 1 samples."""
     spec=importlib.util.spec_from_file_location('viewer_template',viewer);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     manifest=module.reconcile_dates(json.loads((data/'manifest.json').read_text()))
     conn=sqlite3.connect(f'file:{(data/"landuse.sqlite").resolve()}?mode=ro',uri=True)
@@ -96,6 +97,7 @@ def export(data,viewer,html):
     def add(key,b):
         payload=encode(b);blocks.append(f'<script id="data-{key}" type="application/octet-stream">{payload}</script>');return len(payload)
     add('geometry',json.dumps(geometry,separators=(',',':')).encode())
+    # Each source keeps its own endpoints; dictionary reuse changes storage, not coverage.
     for source,codes in manifest['codes'].items():
         dates=[r[0] for r in conn.execute('SELECT DISTINCT effective FROM areas WHERE source=? ORDER BY effective',(source,))]
         if dates!=manifest['dates'][source]:raise ValueError('Manifest/database dates disagree: '+source)

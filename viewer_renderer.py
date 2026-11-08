@@ -7,6 +7,7 @@ from model_configuration import prepare_template
 
 
 def render_viewer(*, imagery='current'):
+    """Assemble imagery first, then apply the same model hooks for both entry points."""
     if imagery not in ('current', 'historical-naip'):
         raise ValueError(f'Unsupported imagery mode: {imagery!r}; use current or historical-naip')
     assets = Path(__file__).parent / 'viewer_assets'

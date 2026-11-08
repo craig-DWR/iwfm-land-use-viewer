@@ -56,6 +56,7 @@ def fields(value, required, optional, setting):
 
 
 def resolve_path(base, value, setting, *, kind=None):
+    """Interpret project paths beside the JSON, not beside the Python script."""
     if not isinstance(value, str) or not value.strip():
         raise ProjectError(f'{setting}: supply a nonempty path relative to the project JSON or an absolute path')
     path = Path(value.replace('\\', '/'))
@@ -130,6 +131,7 @@ def load_project(config_path):
 
 
 def preflight(project):
+    """Reject unverified build settings before creating intermediate snapshots."""
     context = f'inputs in {project.config_path}'
     try:
         from iwfm_build import AdapterBuild
@@ -211,6 +213,7 @@ def preflight(project):
 
 
 def build_project(project):
+    """Reuse build/export commands; publish completed HTML and own only temp cleanup."""
     preflight(project)
     if project.snapshot_directory:
         snapshot = project.snapshot_directory
@@ -243,6 +246,7 @@ def build_project(project):
             os.replace(html, project.output_html)
         else:
             try:
+                # Publish a complete file without clobbering another process's output.
                 os.link(html, project.output_html)
             except FileExistsError as error:
                 raise ProjectError(f'output_html: appeared during build and was not overwritten: {project.output_html}') from error

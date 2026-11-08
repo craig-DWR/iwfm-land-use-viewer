@@ -16,6 +16,7 @@ def add_build_options(parser):
 
 
 def store_source(connection, source, expected_aliases, min_date, *, category_ids=False):
+    """Bridge normalized acres to float32 vectors and the existing interval-end keys."""
     from iwfm_input_adapter import InputValidationError
 
     columns = {(category.id if category_ids else category.legacy_alias): category.id for category in source.categories}
@@ -67,6 +68,7 @@ class AdapterBuild:
                      else datetime.fromisoformat(args.coverage_start))
             evidence = 'explicit --coverage-start'
         elif args.simulation_main:
+            # BDT is authoritative; the first area endpoint only closes a block.
             with strict_mode(True):
                 simulation = read_simulation_main(args.simulation_main)
             start = parse_iwfm_date(simulation.sim_begin)

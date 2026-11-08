@@ -1,4 +1,4 @@
-"""Independent v4.11 land-use input reader; not wired into the viewer build."""
+"""Read v4.11 land-use inputs for independent use and opt-in viewer builds."""
 
 from bisect import bisect_right
 from dataclasses import dataclass
@@ -70,6 +70,7 @@ class UnitBasis:
 
     @classmethod
     def from_preprocessor(cls, path: str | Path):
+        """Establish model square feet from output units with no length conversion."""
         with strict_mode(True):
             config = preprocessor.read_preprocessor_main(path, follow_references=False).config
         if str(config.get('unitltou', '')).upper() != 'FEET' or config.get('factltou') != 1:
@@ -95,14 +96,17 @@ class LandUseSource:
     budget_codes: tuple[str, ...]
 
     def endpoint_for(self, instant: datetime) -> str | None:
+        """Use an inclusive caller-supplied start and exclusive IWFM interval ends."""
         if not isinstance(instant, datetime) or instant.tzinfo is not None:
             raise InputValidationError('Lookup instant must be a naive model datetime')
         if instant < self.coverage_start:
             return None
+        # At an end boundary the old block has expired; choose the following one.
         position = bisect_right(self.interval_ends, instant)
         return self.endpoints[position] if position < len(self.endpoints) else None
 
     def values_at(self, instant: datetime) -> pd.DataFrame | None:
+        """Return covered acreages, including zero, or None for missing coverage."""
         endpoint = self.endpoint_for(instant)
         if endpoint is None:
             return None
@@ -155,6 +159,7 @@ class IWFMInputAdapter:
         return path.resolve()
 
     def read_source(self, source: str) -> LandUseSource:
+        """Keep one source's column identities and timeline separate from other sources."""
         if source not in SOURCE_READERS:
             raise InputValidationError(f'Unknown land-use source: {source}')
         role, read_component = SOURCE_READERS[source]
@@ -238,6 +243,8 @@ class IWFMInputAdapter:
         normalized_dates = frame['date'].map(dict(zip(endpoints, ends)))
         raw_values = frame.drop(columns=['date']).assign(interval_end=normalized_dates)
         raw_values = raw_values.set_index(['interval_end', 'element_id']).sort_index()
+        # FACT converts file values to model square feet; one acre is 43,560 ft2.
+        # Node conversion and the mesh-area denominator are separate conventions.
         acres = raw_values * (factor / 43560.0)
         return LandUseSource(
             source, categories, endpoints, ends, self.coverage_start, raw_values, acres,
