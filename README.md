@@ -1,162 +1,261 @@
+
 # IWFM Land Use Viewer
 
-Explore land-use inputs by model element, subregion, and optional subbasin.
-The viewer was developed for C2VSimFG and has also been checked with SVSim v1.0.
-It displays input acreages, not budget-derived areas, and does not run IWFM.
+The IWFM Land Use Viewer maps and charts acreage from your model's land use
+input files. It creates an HTML file you can open in a browser and share.
+You do not need to run IWFM.
 
-## I Already Have A Standalone HTML Viewer
+Building on this computer for the first time? Start with the first section,
+even if someone already sent you an HTML viewer. If they also sent you the
+viewer settings, you can reuse them.
 
-Double-click the HTML file, or open it from a current Edge, Chrome, or Firefox
-browser. You do not need Python, Git, the model deck, or a server. Keep a local
-copy if you want to use it without an internet connection.
+1. [Build a viewer on this computer for the first time](#build-a-viewer-on-this-computer-for-the-first-time)
+2. [Rebuild after updating land use](#rebuild-after-updating-land-use)
+3. [Open a viewer someone sent me](#open-a-viewer-someone-sent-me)
 
-The mesh, land-use data, chart history, and CSV/PNG export functions are embedded
-in the standalone file. They work offline. Aerial imagery comes from external
-services and needs internet access; turn it off if it cannot load. Internet
-access is not needed to select elements or inspect their land-use data.
+## Build A Viewer On This Computer For The First Time
 
-### Read The Map And Chart Together
+### What You Need
 
-- **Map year:** year Y means the condition on **July 1 of Y**, not an annual
-  average or water-year total. Each source uses its own input interval covering
-  that day, so rice and nonponded crops can come from different update dates.
-- **Geography:** choose Element or Subregion. Subbasin mode appears only when
-  an element-to-zone mapping was included. Subregions and subbasins need not
-  coincide. Click one element, Shift-click to add/remove elements, or use box
-  selection. Element selections are limited to 500 elements.
-- **Chart:** shows the retained time series for the selection, not just July 1
-  samples. Category/group controls determine the series shown. Input date
-  details explain the intervals used for the map.
-- **Acres and percentages:** acreage is summed over the selection. Percentages
-  use its model-element area as the denominator, not the sum of visible crops.
-  Missing input coverage is not zero; charts stop and CSV values remain blank
-  where the selected source has ended.
-- **Downloads:** CSV can contain charted groups or all individual categories;
-  it includes selection identity, intervals, acres, and percentages. PNG saves
-  the chart with its title, context, and legend. A download is a snapshot of
-  the current selection, not a new IWFM input file.
-- **Imagery year:** historical NAIP year is independent of land-use year. Latest
-  NAIP and the current USGS basemap are updating services, not fixed historical
-  archives. A photograph is context, not evidence of the model's acreage date.
+- The complete IWFM model package, including the land use area files you want
+  to display. Make sure its input references lead to those updated files.
+- The viewer tools from this repository. On its GitHub page, choose **Code >
+  Download ZIP**, then right-click the downloaded ZIP and choose **Extract All**.
+  Keep the extracted folder together. Git and VS Code are not required.
+- Viewer settings: a **settings file (project.json)** and the presentation file
+  it references. Use the files someone sent you, or start with an example below.
+  If saved settings use subbasins, also have that definition file available.
 
-Changing an input file does not update an existing HTML viewer. Rebuild it when
-the source data change. Treat the embedded model data as part of the file when
-deciding whom to share it with.
+**The HTML viewer is the finished output. You don't need the old HTML to build
+a new one, and the HTML by itself isn't enough to rebuild.**
 
-## I Have An IWFM Deck And Want To Build A Viewer
+### Set Up The Viewer Tools Once Per Windows Account
 
-The recommended route is one project JSON and one build command. The
-[SVSim project example](examples/svsim-project.json) describes paths and build
-settings; the [SVSim presentation example](examples/svsim-presentation.json)
-describes labels, groups, colors, and branding. Keep your edited copies and
-outputs outside this repository.
+If Python is not already installed, install Python 3.10 or newer. The commands
+below use your existing Python to create a separate environment for the viewer
+and install the packages it needs. This keeps those packages separate from
+your other modeling tools. The environment is created on your computer; it
+is not included in the GitHub download.
 
-### 1. Get The Files And Set Up Python
+For a different IWFM model, read the [compatibility checklist](#a-different-iwfm-model)
+before installing. Both supplied-settings and example-settings paths use this
+same setup. You do not need to activate the environment.
 
-Use Python 3.10 or newer. If you downloaded a repository ZIP, extract it first;
-you do not need Git to build a viewer. Open PowerShell and change to the folder
-containing this README and [build_viewer.py](build_viewer.py).
-
-Replace the first path below with your extracted repository folder. The virtual
-environment is a separate Python installation for this tool; the commands use
-it directly, so no activation or PowerShell execution-policy change is needed.
+Open PowerShell from the Windows Start menu. Replace `PATH_TO_VIEWER_REPOSITORY`
+with the full path to the extracted folder containing this README and
+[build_viewer.py](build_viewer.py). Run this block from that folder:
 
 ```powershell
-Set-Location 'PATH_TO_IWFM_LAND_USE_VIEWER_REPOSITORY'
-$Repo = (Get-Location).Path
+Set-Location 'PATH_TO_VIEWER_REPOSITORY'
 $Environment = Join-Path $env:LOCALAPPDATA 'IWFM-Land-Use-Viewer/python-env'
 python -m venv $Environment
-$Python = Join-Path $Environment 'Scripts/python.exe'
-& $Python -m pip install -r (Join-Path $Repo 'requirements-adapter.txt')
+& (Join-Path $Environment 'Scripts/python.exe') -m pip install -r .\requirements-adapter.txt
 ```
 
-If Python is installed as `py` rather than `python`, use `py -3` in the
-environment-creation command. Package installation requires internet access.
-Do not upgrade the pinned reader independently of this repository.
+If Python is installed as `py` rather than `python`, use `py -3 -m venv
+$Environment` on one line for the creation step. Package installation needs
+internet access. No PowerShell execution-policy change or editor extension is needed.
+The shared build command below finds this environment in a new window.
 
-### 2. Copy And Edit The SVSim Examples
+When you edit the paths in project.json, use this Windows path format:
+**Inside `project.json`, use forward slashes for Windows paths, such as `C:/Model Work/SVSim`. Keep the quotes around the path.**
 
-Run this in the same PowerShell session. The new project folder is outside the
-repository. Use another new folder name for a separate model or repeat build.
+For example, in the SVSim project file, replace this complete root-zone line:
+
+```json
+"rootzone_main": "PATH_TO_SVSIM_MODEL/Simulation/RootZone/SVSim_RootZone.dat",
+```
+
+with this line, using your actual model folder:
+
+```json
+"rootzone_main": "C:/Model Work/SVSim/Simulation/RootZone/SVSim_RootZone.dat",
+```
+
+### A. I Already Have The Viewer Settings
+
+Keep project.json and the files it references available. It tells the builder
+which model files to read and where to save the HTML. Its companion presentation
+file controls how crop names and groups appear.
+
+If relative paths still match your folder layout, leave them alone. Otherwise
+check `inputs.simulation_main`, `inputs.preprocessor_main`,
+`inputs.rootzone_main`, `presentation_config`, and `inputs.zone_definition`
+if subbasins were configured. Relative paths start from the folder containing
+project.json: for example, `presentation_config: "presentation.json"` in
+`C:/Model Work/Viewer Settings/project.json` means
+`C:/Model Work/Viewer Settings/presentation.json`.
+
+Choose a distinct `output_html` name if you want to keep the previous viewer.
+You do not need to recreate crop labels or groups that already match your model.
+Go straight to [C. Build and open the viewer](#c-build-and-open-the-viewer).
+
+### B. I Don't Have The Viewer Settings
+
+If you weren't given viewer settings, start with one of the examples below.
+Choose the example for your model version, copy both settings files into a
+folder for your project, and edit project.json to point to your local model
+files. Keep the two settings files together. Then follow the build command below.
+
+Each pair has a project settings file and its matching presentation file. The
+presentation reference already works when the pair is copied together, even
+if you rename the project file to project.json. The examples need no subbasin
+definition. Do not mix pairs or assume their crop groups, coordinates, or file
+layouts fit another model.
+
+#### C2VSimFG v1.5
+
+In File Explorer, open the extracted viewer repository and then its `examples`
+folder. Copy [c2vsimfg-v1.5-project.json](examples/c2vsimfg-v1.5-project.json)
+and [c2vsimfg.json](examples/c2vsimfg.json) into a new viewer-settings folder
+outside the repository. Rename `c2vsimfg-v1.5-project.json` to `project.json`.
+Leave `c2vsimfg.json` unchanged, and open `project.json` in Notepad.
+
+Replace `PATH_TO_C2VSIMFG_V1_5_MODEL` in all three input paths with your complete
+**v1.5** model folder. Leave `presentation_config: "c2vsimfg.json"` alone.
+For that release, the included UTM 10N/metre settings, model square feet, first
+display year 2000, current imagery, and crop groups can remain as supplied.
+The output is `output/c2vsimfg-v1.5-land-use.html` under your project folder.
+Use a new output name if it already exists, then go to
+[C. Build and open the viewer](#c-build-and-open-the-viewer).
+
+#### SVSim v1.0
+
+In File Explorer, open the extracted viewer repository and then its `examples`
+folder. Copy [svsim-project.json](examples/svsim-project.json) and
+[svsim-presentation.json](examples/svsim-presentation.json) into a new
+viewer-settings folder outside the repository. Rename `svsim-project.json` to
+`project.json`. Leave `svsim-presentation.json` unchanged, and open `project.json`
+in Notepad.
+
+Replace `PATH_TO_SVSIM_MODEL` in all three input paths with your complete
+**v1.0** model folder. Leave `presentation_config: "svsim-presentation.json"`
+alone. For that release, the included UTM 10N/metre settings, model square feet,
+first display year 2000, current imagery, and crop groups can remain as supplied.
+The output is `output/svsim-v1.0-land-use.html` under your project folder.
+Use a new output name if it already exists, then go to
+[C. Build and open the viewer](#c-build-and-open-the-viewer).
+
+#### A Different IWFM Model
+
+Check compatibility before installing or adapting settings:
+
+- The root-zone main input must declare **format 4.11**. This is the component
+  format, not the IWFM executable's release number.
+- Node coordinates must be **NAD83/GRS80 UTM north in metres**, with the actual
+  zone verified from model documentation or GIS projection metadata.
+- Model units must be feet/square feet, with preprocessor `UNITLTOU=FEET` and
+  `FACTLTOU=1`, a metre-to-foot node factor of about `3.28084`, and area
+  `FACT=1` or `43560`. Element-area fractions (`FACT=0`) are unsupported.
+- Land use must be inline time-series input, not DSS or a repeating pattern.
+
+See [the full restrictions](README_landuse_regeneration.md#project-settings-and-output-safety)
+if any setting differs. Use the following table to identify your own model files:
+
+| Setting | File Or Value To Supply | How To Identify It |
+| --- | --- | --- |
+| `inputs.simulation_main` | Simulation main input file | Its file list references components, including root zone; `BDT` supplies the coverage beginning. |
+| `inputs.preprocessor_main` | Preprocessor main input file | Its file list references nodes/elements; unit settings help verify the model's feet/square feet basis. |
+| `inputs.rootzone_main` | Root-zone main input file | The simulation main references it. It declares format 4.11 and references components, which reference the area files. |
+| `presentation_config` | A presentation JSON beside project.json, or a valid path to it | Required before building. Use existing settings for your model or the minimal starting file below. |
+| `map.start_year` | Your first display year | Verify all sources cover July 1 and the chart's January 1 start; final map year comes from common coverage. |
+| `coordinates` | Your verified datum, projection, hemisphere, zone, and node units | Check model/GIS documentation. Neither model name nor filename identifies the CRS for the builder. |
+| `units.model_area` | `square_feet`, if verified. | Supported preprocessor declarations are `UNITLTOU=FEET` and `FACTLTOU=1`. Verify node conversion and each area factor against the reference restrictions. |
+| `imagery` | `current` or `historical-naip` | Choose current USGS imagery only, or the historical/latest NAIP selector. This does not set the land use year. |
+| `output_html` | A new external HTML filename | Relative paths save under the folder containing project.json. The builder prints the absolute result. |
+| `inputs.zone_definition` | Optional verified element-to-zone file | Omit for the basic build. Do not infer it from a subbasin polygon. |
+
+A minimal presentation file without model-specific crop labels or groups works
+**if your model has the urban component**. Save these exact contents as
+`presentation.json` and set `presentation_config` to that filename:
+
+```json
+{
+  "version": 1,
+  "model_title": "IWFM land use",
+  "export_filename_prefix": "IWFM_landuse",
+  "categories": {},
+  "groups": [],
+  "initial_map_category": "urban:urban"
+}
+```
+
+If urban is absent, change only `initial_map_category` to an existing category
+ID. For example, `nonponded:GR` is valid only if `GR` is in your nonponded main's
+`CCODE` list. There is no universal initial ID for every supported model. The
+builder validates these references; missing names use model descriptions or
+neutral labels. Do not borrow another model's crop groups without checking them.
+
+### C. Build And Open The Viewer
+
+If you followed the setup above, leave the first part alone. Replace the two
+example paths with the locations of [build_viewer.py](build_viewer.py) and your project.json.
+The first part finds the Python created during setup; `--config` points to your
+saved settings file. Run from **any folder in a new PowerShell window**:
 
 ```powershell
-$Project = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'IWFM-viewer-project'
-New-Item -ItemType Directory -Path $Project -ErrorAction Stop | Out-Null
-Copy-Item (Join-Path $Repo 'examples/svsim-project.json') (Join-Path $Project 'project.json')
-Copy-Item (Join-Path $Repo 'examples/svsim-presentation.json') (Join-Path $Project 'presentation.json')
-notepad (Join-Path $Project 'project.json')
+& (Join-Path $env:LOCALAPPDATA 'IWFM-Land-Use-Viewer/python-env/Scripts/python.exe') 'PATH_TO_VIEWER_REPOSITORY/build_viewer.py' --config 'PATH_TO_SAVED_VIEWER_SETTINGS/project.json'
 ```
 
-In your project JSON, edit:
-
-| Setting | What To Supply Or Check |
-|---|---|
-| `inputs.rootzone_main` | Replace `PATH_TO_SVSIM_MODEL` with the extracted deck path; preserve the root-zone filename for SVSim. |
-| `inputs.preprocessor_main` | Point to the preprocessor control file, which references the node and element files. |
-| `inputs.simulation_main` | Point to the simulation control file; its `BDT` supplies the beginning of coverage. |
-| `presentation_config` | Replace the placeholder with `presentation.json`, the copy beside your project JSON. |
-| `map.start_year` | First display year; 2000 is covered by the tested SVSim v1.0 inputs. The final year comes from input coverage. |
-| `coordinates` | Verify datum, projection, hemisphere, zone, and native coordinate units from model documentation or GIS metadata. |
-| `units.model_area` | Verify the model uses square feet; also check node and area conversion factors described below. |
-| `imagery` | `current` for USGS imagery only, or `historical-naip` for the historical/latest selector. |
-| `output_html` | Keep `output/svsim-land-use.html`, or choose a new external output path. |
-
-All relative paths are relative to **project.json**, even when you run the
-command from another directory. In JSON, write Windows paths with forward
-slashes, such as `C:/Models/SVSim`, or escape backslashes as `C:\\Models\\SVSim`.
-
-The checked SVSim v1.0 deck uses NAD83 UTM Zone 10N in metres, node `FACT=3.2808`,
-model feet, and area `FACT=43560`. Its node-file documentation and GIS projection
-metadata agree. Do not apply those settings to another model without checking.
-
-Optionally open your `presentation.json` in Notepad to change `model_title` and
-`export_filename_prefix`. That file uses the existing category schema; labels
-do not assign acreage columns. See the [configuration reference](README_landuse_regeneration.md#category-and-branding-configuration)
-for group definitions and a C2VSimFG example.
-
-### 3. Build And Open The Viewer
-
-Run in the same PowerShell session:
+For example, with these illustrative Windows folders containing spaces:
 
 ```powershell
-& $Python (Join-Path $Repo 'build_viewer.py') --config (Join-Path $Project 'project.json')
-Invoke-Item (Join-Path $Project 'output/svsim-land-use.html')
+& (Join-Path $env:LOCALAPPDATA 'IWFM-Land-Use-Viewer/python-env/Scripts/python.exe') 'C:\Model Tools\IWFM Land Use Viewer\build_viewer.py' --config 'C:\Model Work\Viewer Settings\project.json'
 ```
 
-If you changed `output_html`, open the absolute path printed after
-`Finished HTML:` instead. The final file needs no accompanying database or
-model files. By default the intermediate snapshot is temporary and removed.
+Open the file listed after **`Finished HTML:`**. The builder stops by default if
+that output file already exists; a new `output_html` name keeps the previous
+viewer available. Spot-check a crop, location, and year you know you changed to
+confirm the model references picked up your updated area files. Keep your
+settings files for the next update. Advanced output choices and optional colors,
+labels, crop groups, and subbasins are in the
+[regeneration reference](README_landuse_regeneration.md).
 
-An existing HTML file is protected by default. Choose a new output name rather
-than enabling overwrite unless replacement is intentional. A failed export
-preserves existing HTML and publishes no partial final file. Default safe
-publication needs hard-link support, such as NTFS; see the
-[output-safety reference](README_landuse_regeneration.md#project-settings-and-output-safety)
-for explicit overwrite, retained snapshots, and retry behavior.
+## Rebuild After Updating Land Use
 
-### Supported Inputs And Limitations
+Use these steps if you've already set up the viewer tools on this computer and
+have working settings for this model. It doesn't matter who built the original
+viewer.
 
-The recommended build currently supports:
+1. Use the complete model folder and make sure its IWFM input references point
+   to the updated land use area files. The viewer does not look for the newest
+   file in a folder.
+2. If files are still in the same places, keep the input paths and change
+   `output_html` to save a new copy. For a new model folder, check the simulation,
+   preprocessor, and root-zone main paths, the presentation reference, and any
+   subbasin definition. Routine acreage updates do not require changing crop
+   labels, colors, or groups.
+3. Run the [shared build command](#c-build-and-open-the-viewer), open the new
+   HTML, and spot-check a known acreage change. Skip Python setup if it is
+   already done.
 
-- Root-zone input format **4.11**, using exactly **iwfm-io 2.15.2**. This is the
-  component format header, not the IWFM executable's release number.
-- Inline land-use time series with no repetition and no DSS input. Fractions
-  (`FACT=0`) and other root-zone formats are not supported by this workflow.
-- NAD83/GRS80 UTM north coordinates in metres, with an explicitly supplied zone.
-  It is not a general CRS conversion tool and does not infer CRS from filenames.
-- Model square feet: preprocessor `UNITLTOU=FEET` and `FACTLTOU=1`, node factor
-  near 3.28084, and area `FACT=1` (square feet) or `43560` (acres).
-- Different nonponded counts/orders from `NCROP`/`CCODE`; the other categories
-  follow the v4.11 slots. Descriptions are labels only. Unknown names use neutral
-  labels; categories present with zero acreage remain present.
+## Open A Viewer Someone Sent Me
 
-Subbasins require an optional **verified element-to-zone definition**. They are
-not inferred from a GIS boundary or a model name. Leave them off for the SVSim
-quick start. The final map year uses common source coverage; charts can show a
-later interval for a source that continues after the others end.
+Double-click the HTML file or open it in a current Edge, Chrome, or Firefox
+browser. No Python, Git, or model files are needed. The map and charts work
+offline; aerial imagery needs internet access and can be turned off.
 
-The original scripts still default to the legacy C2VSimFG reader. That path has
-fixed category and unit assumptions and is not the recommended generic build.
-For existing commands, SQLite snapshots, static hosting, and advanced options,
-use [the regeneration reference](README_landuse_regeneration.md). For changes
-to this repository, see [CONTRIBUTING.md](CONTRIBUTING.md).
+The map year shows the condition on **July 1**, not an annual average. The chart
+shows the retained land use time series. Aerial imagery year is independent of
+land use year. See [viewer controls and interpretation](#viewer-controls-and-interpretation)
+for selection and export details. The HTML contains model data, so consider
+that when sharing it.
+
+## Viewer Controls And Interpretation
+
+- Choose Element, Subregion, or Subbasin when a verified mapping was included.
+  Subregions and subbasins need not coincide. Go-to suggestions follow the mode.
+- Click an element, Shift-click to add/remove elements, or use box selection.
+  Element selections are limited to 500 elements.
+- The July 1 map queries each source's own interval. The chart keeps source
+  update dates rather than replacing the time series with annual samples.
+- Acres sum over the selection. Percentages use its model-element area, not the
+  sum of the displayed crops. Missing input coverage stays distinct from zero.
+- CSV can contain charted groups or all categories, including selection identity,
+  intervals, acres, and percentages. PNG saves the chart, context, and legend.
+- Historical NAIP choices are independent of land use dates. Latest NAIP and the
+  current USGS basemap are updating services, not fixed historical archives.
+
+For existing commands, intermediate snapshots, advanced options, and output
+troubleshooting, use [the regeneration reference](README_landuse_regeneration.md).
+For repository changes and test commands, see [CONTRIBUTING.md](CONTRIBUTING.md).

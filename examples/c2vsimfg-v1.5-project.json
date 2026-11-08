@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "reader": "iwfm-io",
+  "inputs": {
+    "rootzone_main": "PATH_TO_C2VSIMFG_V1_5_MODEL/Simulation/RootZone/C2VSimFG_RootZone.dat",
+    "preprocessor_main": "PATH_TO_C2VSIMFG_V1_5_MODEL/Preprocessor/C2VSimFG_Preprocessor.in",
+    "simulation_main": "PATH_TO_C2VSIMFG_V1_5_MODEL/Simulation/C2VSimFG.in"
+  },
+  "presentation_config": "c2vsimfg.json",
+  "map": {"start_year": 2000},
+  "coordinates": {
+    "datum": "NAD83",
+    "projection": "UTM",
+    "hemisphere": "north",
+    "zone": 10,
+    "units": "metres"
+  },
+  "units": {"model_area": "square_feet"},
+  "imagery": "current",
+  "output_html": "output/c2vsimfg-v1.5-land-use.html"
+}

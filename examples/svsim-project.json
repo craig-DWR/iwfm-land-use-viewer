@@ -6,7 +6,7 @@
     "preprocessor_main": "PATH_TO_SVSIM_MODEL/PreProcessor/SVSim_Preprocessor.in",
     "simulation_main": "PATH_TO_SVSIM_MODEL/Simulation/SVSim.in"
   },
-  "presentation_config": "PATH_TO_PRESENTATION_CONFIG_JSON",
+  "presentation_config": "svsim-presentation.json",
   "map": {"start_year": 2000},
   "coordinates": {
     "datum": "NAD83",
@@ -17,5 +17,5 @@
   },
   "units": {"model_area": "square_feet"},
   "imagery": "current",
-  "output_html": "output/svsim-land-use.html"
+  "output_html": "output/svsim-v1.0-land-use.html"
 }
