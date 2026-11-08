@@ -14,6 +14,7 @@ command syntax, not a recommendation to commit model data or outputs.
 - `c2vsim_landuse_explorer_naip.py` — historical-NAIP compatibility script; keeps the same commands and exposes historical-mode `HTML`.
 - `export_landuse_standalone.py` — compresses a built SQLite snapshot into one HTML file using either template.
 - `viewer_renderer.py`, `viewer_assets/base.html`, `viewer_assets/imagery.json`, and `model_configuration.py` — shared viewer rendering and presentation hooks required by both entry points and exporters. Keep both asset files in `viewer_assets/` beside the renderer; paths are resolved relative to the renderer, not the working directory.
+- `subbasin_names.json` — DWR name data used only to preserve Bulletin 118 labels when opening older snapshots without configurable zone metadata; new C2VSimFG settings carry explicit zone names.
 - This README.
 
 Use Python 3.10 or newer. The original legacy build and snapshot-to-HTML export
@@ -50,12 +51,11 @@ Create a folder named `data` beside the scripts. It must contain one matching fi
 
 The prefixes may differ, but the distinguishing filename portions (Nodes, Elements, NonPondedCrop_Area, and so on) must remain. Each DAT may instead be a ZIP containing one DAT. Do not leave both DAT and ZIP alternatives, or multiple versions of the same input, in the input folder.
 
-For subbasin selections, also include a verified element-based ZoneBudget
-definition, such as `ZBudget_C2VSimFG_GSP_Subbasins.DAT`. Its filename must
-contain `ZBudget` or `ZoneDef`. Membership and boundaries come from those
-element assignments, not external polygons. Matching Bulletin 118 labels can
-receive the embedded descriptive names described below. Include the zone file
-again on each rebuild to preserve subbasin features.
+For optional zone exploration, also include a verified element-based
+ZoneBudget definition, such as `ZBudget_C2VSimFG_GSP_Subbasins.DAT`. Its
+filename must contain `ZBudget` or `ZoneDef`. Membership and boundaries come
+from those element assignments, not external polygons. Include the zone file
+again on each rebuild to preserve the zone mode.
 
 Build one snapshot using either builder; both viewer variants use the same snapshot format:
 
@@ -94,21 +94,27 @@ Open http://127.0.0.1:8767. Press Ctrl+C in the corresponding PowerShell window 
 
 ## Quick checks after regenerating
 
-Open both HTML files, select a familiar element, and confirm its geography and values. Check a subbasin that spans several subregions. Turn rice categories on/off and verify the group color stays consistent. Download a CSV and PNG. If imagery is unavailable, the embedded data should still work; check the aerial-imagery checkbox or choose another imagery source where available.
+Open both HTML files, select a familiar element, and confirm its geography and values. Check a zone that spans several subregions. Turn rice categories on/off and verify the group color stays consistent. Download a CSV and PNG. If imagery is unavailable, the embedded data should still work; check the aerial-imagery checkbox or choose another imagery source where available.
 
 No model input data or SQLite database is included in this small regeneration kit. Keep your original inputs and snapshot separately.
 
-## Descriptive basin and subbasin names (October 14 update)
+## C2VSimFG Names And Older Snapshots
 
-Both viewer templates now embed DWR basin names and show the name first with the Bulletin 118 ID in parentheses, for example North American (5-021.64). This applies to selectors, selection context, map hover text, CSV and PNG exports. The right-hand Go to field accepts either the displayed name with ID or the original basin ID. Labels Suisun Bay and Unassigned remain unchanged.
+New C2VSimFG v1.5 builds use the explicit `zones.names` entries in
+[examples/c2vsimfg.json](examples/c2vsimfg.json). They apply to the standard
+`C2VSimFG_ZBudget_GWSubbasins.DAT` definition only: each ZID is paired with its
+Bulletin 118 code in that file, and the settings map that exact ZID to the DWR
+name plus code. The last zone, Suisun Bay, keeps its literal file label. A
+different C2VSimFG zone definition needs its own labels; do not reuse this ZID
+mapping unless its definition matches.
 
-The earlier C2VSimFG review matched 45 numbered labels against DWR's Bulletin
-118 service. Only labels changed, not boundaries, assignments, or acreage.
-Names are embedded, so no network lookup is needed. [subbasin_names.json](subbasin_names.json)
-is a reference copy, not a runtime dependency. To amend a name, update
-`basinNameByCode` in [viewer_assets/base.html](viewer_assets/base.html) and
-export again. Both imagery modes use that shared template. Unrecognized IDs
-remain visible as IDs.
+Older snapshots have no `model_configuration.zones` metadata. The compatibility
+renderer still recognizes known Bulletin 118 codes in those manifests and
+preserves familiar labels such as North American (5-021.64) and
+Unassigned (ZoneBudget -99). This fallback does not affect new configured
+zone definitions. `subbasin_names.json` supplies that legacy fallback data;
+the generated HTML embeds it and makes no network lookup. Rebuild an older
+snapshot only to use new ZoneBudget assignments or presentation settings.
 
 Source: https://gis.water.ca.gov/arcgis/rest/services/Geoscientific/i08_B118_CA_GroundwaterBasins/FeatureServer/0 (name records retrieved October 14, 2026; source layer describes basin boundaries current December 9, 2022).
 
@@ -118,7 +124,7 @@ Exported acreage columns (`acres` and `selected_area_acres`) use two decimal pla
 
 ## Navigation fix October 29 2026
 
-The right-panel Go to suggestions now follow Explore by: element IDs in Element mode, subregion numbers in Subregion mode, and subbasin names in Subbasin mode. Type an ID or name to narrow the suggestions, then click Go. Switching modes clears the previous geographic selection. Both standalone HTML files and both Python templates include this fix.
+The right-panel Go to suggestions follow Explore by: element IDs in Element mode, subregion numbers in Subregion mode, and configured zone names in the third mode. Type an ID or name to narrow the suggestions, then click Go. Switching modes clears the previous geographic selection. Both imagery modes use the same behavior.
 
 ## Opt-In Reader And Static Export
 
@@ -182,6 +188,66 @@ and root-zone 4.11; fractions (`FACT=0`), DSS, recurring timelines, other factor
 formats, and projections are unsupported. Existing snapshots can still be
 exported without using this reader.
 
+## Configurable ZoneBudget Zones
+
+`inputs.zone_definition` in project.json names the optional horizontal
+ZoneBudget definition. Its path is relative to project.json, like the other
+input paths. Put display terminology and optional labels in the separate file
+named by `presentation_config`:
+
+```json
+{
+	"version": 1,
+	"categories": {},
+	"groups": [],
+	"initial_map_category": "nonponded:GR",
+	"zones": {
+		"singular": "County",
+		"plural": "Counties",
+		"names": {
+			"1": "Colusa County",
+			"2": "Glenn County"
+		}
+	}
+}
+```
+
+For example, add this property alongside the other inputs in project.json:
+
+```json
+"zone_definition": "../Model/ZoneBudget/ZoneDef_Counties.DAT"
+```
+
+Use a horizontal ZoneBudget definition (`ZEXTENT=1`) with at most one zone
+assignment per model element. The viewer sums acreage for the whole elements
+assigned to each zone. It cannot use zones that vary by model layer or split an
+element's acreage across geographic boundaries. If your ZoneBudget analysis
+uses layers, keep that file and create a separate horizontal definition for
+the viewer. You can also omit the zone file and explore by element or model
+subregion. A custom type replaces the existing Subbasin option; it does not
+add another exploration mode.
+
+Zone IDs in `zones.names` are the ZIDs in that particular definition. Names do
+not alter membership, boundaries, or acreage. Explicit configured names take
+precedence over nonempty file labels; missing names use the configured type
+and ID, such as `County 3` or `Zone 3`. The special `-99` unassigned bucket is
+reserved and cannot be configured as a user zone. Unassigned elements remain
+available in Element and Subregion modes.
+
+The [C2VSimFG v1.5 presentation example](examples/c2vsimfg.json) includes the
+verified ZID-to-Bulletin 118 names for the standard
+`C2VSimFG_ZBudget_GWSubbasins.DAT` definition. That file declares the mapping
+from each ZID to its code; the names are not inferred from sequential IDs.
+The sample's Zone 37 is `5-021.64`, displayed as `North American (5-021.64)`;
+Zone 46 is the literal `Suisun Bay`. If you use another C2VSimFG ZoneBudget
+definition, update or remove the `zones.names` entries to match that file's
+ZIDs, or retain its own descriptive labels. Do not copy the sample mapping to
+another definition. Existing projects can keep the familiar labels by adding
+the `zones` object to their presentation file. Older snapshots without this
+object continue to open; the viewer uses its legacy Bulletin 118 compatibility
+mapping for those snapshots. Rebuild to use new ZoneBudget assignments or
+presentation settings.
+
 ## Category And Branding Configuration
 
 Use [examples/c2vsimfg.json](examples/c2vsimfg.json) for C2VSimFG presets or
@@ -207,6 +273,7 @@ display names remain distinct series. Configured CSV category codes are stable
 IDs; no-config snapshots retain legacy aliases. Colors affect chart/legend
 series, not the existing numerical map ramp.
 
-Without a subbasin mapping, controls and context are hidden and CSV subbasin
-values are blank, with the same column schema. With a supplied mapping,
-genuinely unassigned elements remain labeled Unassigned.
+Without a ZoneBudget mapping, the third mode and its controls/context are hidden
+and CSV subbasin values are blank, with the same column schema. With a supplied
+mapping, genuinely unassigned elements remain grouped under the reserved
+ZoneBudget `-99` label; user settings cannot rename that sentinel.

@@ -348,13 +348,10 @@ def preflight(project):
                 Category(f"{source}:{code}", source, column, code, code, "preflight")
                 for column, code in enumerate(codes, 1)
             )
-        context = f"presentation_config: {project.presentation_config}"
-        resolve_configuration(read_json(project.presentation_config), categories)
-        if project.output_html in protected:
-            raise ProjectError(
-                f"output_html: conflicts with an input or runtime asset: {project.output_html}"
-            )
+        zone_ids = None
+        zone_labels = None
         if project.zone_definition:
+            context = f"inputs.zone_definition: {project.zone_definition}"
             name = project.zone_definition.stem.lower()
             if project.zone_definition.suffix.lower() not in (".dat", ".zip") or not (
                 "zbudget" in name or "zonedef" in name
@@ -364,7 +361,27 @@ def preflight(project):
                 )
             from c2vsim_landuse_explorer_expanded import subbasins
 
-            subbasins(project.zone_definition, prepared.adapter.element_ids)
+            zone_labels, _ = subbasins(
+                project.zone_definition, prepared.adapter.element_ids
+            )
+            zone_ids = set(zone_labels) - {-99}
+            zone_labels = {
+                zone_id: label
+                for zone_id, label in zone_labels.items()
+                if zone_id != -99
+            }
+        context = f"presentation_config: {project.presentation_config}"
+        resolve_configuration(
+            read_json(project.presentation_config),
+            categories,
+            zone_ids=zone_ids,
+            zone_labels=zone_labels,
+            zone_definition=project.zone_definition,
+        )
+        if project.output_html in protected:
+            raise ProjectError(
+                f"output_html: conflicts with an input or runtime asset: {project.output_html}"
+            )
     except ProjectError:
         raise
     except ModuleNotFoundError as error:

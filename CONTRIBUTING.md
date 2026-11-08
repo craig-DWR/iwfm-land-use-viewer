@@ -28,12 +28,12 @@ land-use inputs when checking reader parity.
 | Project paths, preflight, output protection, temporary cleanup | [build_viewer.py](build_viewer.py): `load_project`, `preflight`, `build_project` |
 | Ordered categories, v4.11 validation, acreage conversion, missing coverage | [iwfm_input_adapter.py](iwfm_input_adapter.py): `IWFMInputAdapter`, `UnitBasis`, `LandUseSource` |
 | Adapter-to-snapshot wiring and stored precision | [iwfm_build.py](iwfm_build.py): `AdapterBuild`, `store_source` |
-| Legacy dates, July 1 selection, geometry, SQLite, build, HTTP, and static export | [landuse_viewer_backend.py](landuse_viewer_backend.py): `datestamp`, `period_end_for_day`, `reconcile_dates`, `geometry`, `build`, `serve`, `export_web` |
+| Legacy dates, July 1 selection, geometry, SQLite, ZoneBudget membership/aggregation, build, HTTP, and static export | [landuse_viewer_backend.py](landuse_viewer_backend.py): `datestamp`, `period_end_for_day`, `reconcile_dates`, `geometry`, `subbasins`, `build`, `serve`, `export_web` |
 | Current-imagery compatibility entry point and `HTML` value | [c2vsim_landuse_explorer_expanded.py](c2vsim_landuse_explorer_expanded.py) |
 | Historical-NAIP compatibility entry point and `HTML` value | [c2vsim_landuse_explorer_naip.py](c2vsim_landuse_explorer_naip.py) |
 | Shared map/chart/selection/CSV/PNG template | [viewer_assets/base.html](viewer_assets/base.html) |
 | Current/historical imagery fragments and assembly | [viewer_assets/imagery.json](viewer_assets/imagery.json), [viewer_renderer.py](viewer_renderer.py): `render_viewer` |
-| Stable IDs, labels/groups/colors, branding, no-mapping hooks | [model_configuration.py](model_configuration.py): `resolve_configuration`, `prepare_template` |
+| Stable IDs, labels/groups/colors, branding, zone terminology/names, compatibility hooks | [model_configuration.py](model_configuration.py): `resolve_configuration`, `resolve_zone_configuration`, `prepare_template` |
 | Single-file HTML encoding and browser data API | [export_landuse_standalone.py](export_landuse_standalone.py): `export`, `API` |
 
 The two compatibility entry points pass their imagery choice explicitly to the
@@ -43,6 +43,13 @@ the corresponding HTML and API insertion marker. Shared-template comments and
 whitespace are copied into generated HTML. Avoid changing those strings in
 readability-only work, and check both `current` and `historical-naip` modes after
 template edits.
+
+Zone membership is read from at most one horizontal ZoneBudget definition per
+build and stays keyed by the existing `subbasin` snapshot/API identifiers.
+`model_configuration.py` resolves presentation names and terms; it never
+changes membership or acreage. C2VSimFG v1.5's verified Bulletin 118 ZID names
+are explicit in its presentation example. The shared HTML has only a narrowly
+scoped fallback for snapshots created before configurable zone metadata.
 
 IWFM `24:00` is next-day midnight. Endpoints are exclusive: lookup exactly at an
 endpoint moves to the next interval. The caller supplies the first coverage

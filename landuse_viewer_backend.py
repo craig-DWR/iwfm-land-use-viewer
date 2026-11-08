@@ -130,6 +130,9 @@ def reconcile_dates(manifest):
         "values apply after the preceding timestamp through this timestamp. "
         "24:00 closes the stated day. No values are extended past the final block."
     )
+    from model_configuration import apply_legacy_zone_names
+
+    apply_legacy_zone_names(manifest)
     return manifest
 
 
@@ -227,41 +230,125 @@ def geometry(nodes_path, elements_path):
 
 
 def subbasins(path, valid_ids):
-    """Read a horizontal-plane IWFM ZBudget zone definition and validate membership."""
+    """Read a horizontal ZoneBudget definition; keep this legacy name as an alias."""
+    path = Path(path)
+    declarations = {}
+    assignments = {}
+    assignment_rows = {}
+    declared_zones = set()
+    reading_assignments = False
+    extent_seen = False
     with lines(path) as stream:
-        rows = iter(noncomments(stream))
-        extent = int(next(rows).split("/")[0].strip())
-        if extent != 1:
-            raise ValueError(f"{path.name}: expected horizontal ZEXTENT=1")
-        names = {}
-        assignment = {}
-        reading_elements = False
-        for line in rows:
-            fields = line.split("/")[0].split()
-            if len(fields) < 2:
-                continue
+        for row_number, raw in enumerate(stream, 1):
+            line = raw.strip()
             if (
-                not reading_elements
-                and fields[0].lstrip("-").isdigit()
-                and not fields[1].lstrip("-").isdigit()
+                not line
+                or re.match(r"^[Cc](?:\s|[*-]|$)", line)
+                or line.startswith(("#", "*"))
             ):
-                zone = int(fields[0])
-                names[zone] = " ".join(fields[1:])
                 continue
-            if len(fields) == 2 and all(x.lstrip("-").isdigit() for x in fields):
-                reading_elements = True
-                eid, zone = map(int, fields)
-                if eid not in valid_ids:
-                    raise ValueError(f"{path.name}: unknown element {eid}")
-                if eid in assignment:
-                    raise ValueError(f"{path.name}: duplicate element {eid}")
-                if zone not in names:
-                    raise ValueError(f"{path.name}: zone {zone} has no name")
-                assignment[eid] = zone
-        if not names or not assignment:
-            raise ValueError(f"{path.name}: no subbasin names or assignments")
+            fields = line.split("/", 1)[0].split()
+            if not fields:
+                continue
+            if not extent_seen:
+                if len(fields) != 1 or not re.fullmatch(r"-?\d+", fields[0]):
+                    raise ValueError(
+                        f"{path.name}: row {row_number}: expected the ZEXTENT integer"
+                    )
+                extent_seen = True
+                extent = int(fields[0])
+                if extent == 0:
+                    raise ValueError(
+                        f"{path.name}: row {row_number}: ZEXTENT=0 assigns zones by model layer; "
+                        "land use is assigned to whole model elements, so the viewer needs a separate horizontal definition with ZEXTENT=1"
+                    )
+                if extent != 1:
+                    raise ValueError(
+                        f"{path.name}: row {row_number}: unsupported ZEXTENT={extent}; expected horizontal ZEXTENT=1"
+                    )
+                continue
+
+            first_is_integer = re.fullmatch(r"-?\d+", fields[0]) is not None
+            second_is_integer = (
+                len(fields) > 1 and re.fullmatch(r"-?\d+", fields[1]) is not None
+            )
+            if (
+                not reading_assignments
+                and first_is_integer
+                and (len(fields) == 1 or not second_is_integer)
+            ):
+                zone_id = int(fields[0])
+                if zone_id == -99:
+                    raise ValueError(
+                        f"{path.name}: row {row_number}: zone ID -99 is reserved for unassigned elements"
+                    )
+                if zone_id in declared_zones:
+                    raise ValueError(
+                        f"{path.name}: row {row_number}: duplicate declared zone {zone_id}"
+                    )
+                declared_zones.add(zone_id)
+                label = " ".join(fields[1:]).strip().strip('"') or None
+                declarations[zone_id] = label
+                continue
+
+            reading_assignments = True
+            if len(fields) != 2 or any(
+                re.fullmatch(r"-?\d+", value) is None for value in fields
+            ):
+                raise ValueError(
+                    f"{path.name}: row {row_number}: malformed horizontal assignment; expected IE ZONE (two integers). "
+                    "Layer-specific assignments need a separate horizontal definition"
+                )
+            element_id, zone_id = map(int, fields)
+            if element_id not in valid_ids:
+                raise ValueError(
+                    f"{path.name}: row {row_number}: unknown model element {element_id}"
+                )
+            if element_id in assignments:
+                raise ValueError(
+                    f"{path.name}: row {row_number}: element {element_id} is assigned more than once "
+                    f"(first assignment at row {assignment_rows[element_id]})"
+                )
+            if zone_id != -99 and declared_zones and zone_id not in declared_zones:
+                raise ValueError(
+                    f"{path.name}: row {row_number}: zone {zone_id} is not declared in the ZID table"
+                )
+            if zone_id != -99:
+                declarations.setdefault(zone_id, None)
+            assignments[element_id] = zone_id
+            assignment_rows[element_id] = row_number
+
+    if not extent_seen:
+        raise ValueError(f"{path.name}: missing ZEXTENT row")
+    zone_ids = set(declarations) | {
+        zone for zone in assignments.values() if zone != -99
+    }
+    if not assignments or not zone_ids:
+        raise ValueError(f"{path.name}: no numbered zones or element assignments")
+    names = {zone_id: declarations.get(zone_id) for zone_id in zone_ids}
     names[-99] = "Unassigned (ZoneBudget -99)"
-    return names, {eid: assignment.get(eid, -99) for eid in valid_ids}
+    return names, {
+        element_id: assignments.get(element_id, -99) for element_id in valid_ids
+    }
+
+
+def zone_display_name(manifest, zone_id):
+    key = str(zone_id)
+    file_label = (manifest.get("subbasins") or {}).get(key)
+    model_configuration = manifest.get("model_configuration") or {}
+    configured = model_configuration.get("zones")
+    display = configured or manifest.get("zone_display") or {}
+    if key == "-99":
+        return (
+            (display.get("names") or {}).get(key)
+            or file_label
+            or "Unassigned (ZoneBudget -99)"
+        )
+    return (
+        (display.get("names") or {}).get(key)
+        or file_label
+        or f"{display.get('singular', 'Zone')} {key}"
+    )
 
 
 def hashfile(path):
@@ -441,6 +528,12 @@ def build(args, *, imagery):
     zone_names, zone_by_element = (
         subbasins(zones[0], {e[0] for e in elems}) if zones else ({}, {})
     )
+    zone_ids = set(zone_names) - {-99} if zones else None
+    zone_labels = (
+        {zone_id: label for zone_id, label in zone_names.items() if zone_id != -99}
+        if zones
+        else None
+    )
     if zones:
         paths["subbasins"] = zones[0]
     db = out / "landuse.sqlite"
@@ -517,10 +610,21 @@ def build(args, *, imagery):
     if adapter_build:
         manifest["input_reader"] = adapter_build.metadata
     if configured:
-        presentation = adapter_build.presentation()
+        presentation = adapter_build.presentation(
+            zone_ids=zone_ids,
+            zone_labels=zone_labels,
+            zone_definition=zones[0] if zones else None,
+        )
         manifest["codes"] = codes
         manifest["labels"] = presentation["labels"]
         manifest["model_configuration"] = presentation
+    elif zones:
+        from model_configuration import resolve_zone_configuration
+
+        if "zone_display" not in manifest:
+            manifest["zone_display"] = resolve_zone_configuration(
+                {}, zone_ids=zone_ids, zone_labels=zone_labels
+            )
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (out / "index.html").write_text(html, encoding="utf-8")
     conn.execute("ANALYZE")
@@ -723,7 +827,7 @@ def serve(args, *, imagery):
                             {
                                 "id": eid,
                                 "region": f"Subregion {row[0]}",
-                                "name": manifest["subbasins"].get(str(eid))
+                                "name": zone_display_name(manifest, eid)
                                 if is_subbasin
                                 else None,
                                 "acres": row[1],
@@ -833,7 +937,7 @@ async function api(path){
       let shard=Math.floor(staticIndex.get(id)/128).toString().padStart(4,'0');raw=(await staticFetch(`./history/elements/${shard}.json.gz`,'gzip'))[id];
     }else raw=(await staticFetch(`./history/${mode}.json.gz`,'gzip'))[id];
     if(!raw)throw Error('No history for '+mode+' '+id);
-    return {id,region:`Subregion ${info.region}`,name:mode==='subbasin'?manifest.subbasins[id]:null,acres:info.acres,count:info.count,series:staticSeries(raw),periods:staticPeriods(year)};
+    return {id,region:`Subregion ${info.region}`,name:mode==='subbasin'?zoneName(id):null,acres:info.acres,count:info.count,series:staticSeries(raw),periods:staticPeriods(year)};
   }
   throw Error('Unknown data path: '+path);
 }
