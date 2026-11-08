@@ -40,6 +40,7 @@ def datestamp(s):
     if not m: raise ValueError(f'Invalid IWFM time: {s}')
     mm, dd, yy, hh, minute = map(int, m.groups())
     d = date(yy, mm, dd)
+    # IWFM 24:00 closes the named day and is stored as the next day's midnight.
     if hh == 24 and minute == 0: d += timedelta(days=1)
     elif hh != 0 or minute != 0: raise ValueError(f'Unsupported daily time: {s}')
     return d.isoformat()
@@ -55,6 +56,7 @@ def period_end_for_day(dates, day):
 
 def reconcile_dates(manifest):
     """Apply interval-ending semantics to both new and existing snapshots."""
+    # July 1 queries sources independently; maps stop at common coverage, not the longest chart.
     ends = [max(ds) for ds in manifest['dates'].values()]
     common_end = min(ends)
     last_day = date.fromisoformat(common_end) - timedelta(days=1)
@@ -99,6 +101,7 @@ def noncomments(stream):
             yield s
 
 def geometry(nodes_path, elements_path):
+    # Native metre coordinates place the mesh; node FACT is for model units, not the basemap.
     with lines(nodes_path) as stream:
         rows = iter(noncomments(stream))
         n = int(next(rows).split('/')[0]); next(rows)  # ND and FACT; coordinates remain in native units.

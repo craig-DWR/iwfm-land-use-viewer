@@ -1,394 +1,162 @@
-# iwfm-land-use-viewer
-Build standalone interactive maps from IWFM land-use inputs. Initially developed for C2VSimFG.
+# IWFM Land Use Viewer
 
-## One-Command Quick Start
+Explore land-use inputs by model element, subregion, and optional subbasin.
+The viewer was developed for C2VSimFG and has also been checked with SVSim v1.0.
+It displays input acreages, not budget-derived areas, and does not run IWFM.
 
-From the repository root, use Python 3.10 or newer in an isolated environment
-and install the pinned
-reader with `python -m pip install -r requirements-adapter.txt`.
+## I Already Have A Standalone HTML Viewer
 
-The example writes `output/svsim-land-use.html` beside your external project
-JSON; edit `output_html` to choose another location. Exports finish in a private
-temporary directory before publication. A failed export leaves an existing HTML
-unchanged and creates no partial file at the final path. Default no-overwrite
-publication is atomic and requires a filesystem supporting hard links (for
-example NTFS). If unsupported, it fails safely; choose a supported output
-filesystem or explicitly enable `overwrite`. Overwrite uses atomic replacement
-only after a successful export.
+Double-click the HTML file, or open it from a current Edge, Chrome, or Firefox
+browser. You do not need Python, Git, the model deck, or a server. Keep a local
+copy if you want to use it without an internet connection.
 
-Cleanup removes only temporary directories created by this command, never a
-user-supplied snapshot directory. A retained snapshot may contain intermediate
-build files after failure; inspect it or choose a new/empty directory before
-retrying. Conflicts that appear during preflight are rechecked before building.
+The mesh, land-use data, chart history, and CSV/PNG export functions are embedded
+in the standalone file. They work offline. Aerial imagery comes from external
+services and needs internet access; turn it off if it cannot load. Internet
+access is not needed to select elements or inspect their land-use data.
 
-1. Copy `examples/svsim-project.json` to an external project folder as
-	 `project.json` and replace its input-path placeholders.
-2. Set `presentation_config` to `examples/svsim-presentation.json` in this
-	 checkout, an external copy, or your existing category/branding JSON. Paths
-	 here are relative to the project JSON, not to this checkout.
-3. Verify the coordinate/unit declarations for your deck and choose an external
-	 `output_html` path. The example's settings were verified for SVSim v1.0.
+### Read The Map And Chart Together
 
-From this repository, run:
+- **Map year:** year Y means the condition on **July 1 of Y**, not an annual
+  average or water-year total. Each source uses its own input interval covering
+  that day, so rice and nonponded crops can come from different update dates.
+- **Geography:** choose Element or Subregion. Subbasin mode appears only when
+  an element-to-zone mapping was included. Subregions and subbasins need not
+  coincide. Click one element, Shift-click to add/remove elements, or use box
+  selection. Element selections are limited to 500 elements.
+- **Chart:** shows the retained time series for the selection, not just July 1
+  samples. Category/group controls determine the series shown. Input date
+  details explain the intervals used for the map.
+- **Acres and percentages:** acreage is summed over the selection. Percentages
+  use its model-element area as the denominator, not the sum of visible crops.
+  Missing input coverage is not zero; charts stop and CSV values remain blank
+  where the selected source has ended.
+- **Downloads:** CSV can contain charted groups or all individual categories;
+  it includes selection identity, intervals, acres, and percentages. PNG saves
+  the chart with its title, context, and legend. A download is a snapshot of
+  the current selection, not a new IWFM input file.
+- **Imagery year:** historical NAIP year is independent of land-use year. Latest
+  NAIP and the current USGS basemap are updating services, not fixed historical
+  archives. A photograph is context, not evidence of the model's acreage date.
 
-```powershell
-python build_viewer.py --config path/to/project.json
-```
+Changing an input file does not update an existing HTML viewer. Rebuild it when
+the source data change. Treat the embedded model data as part of the file when
+deciding whom to share it with.
 
-From another working directory, use the absolute path to `build_viewer.py`.
-All paths inside the JSON still resolve relative to that JSON file. Success
-prints the absolute finished HTML path. By default intermediate snapshot files
-are temporary and removed; the standalone HTML is the only retained output.
+## I Have An IWFM Deck And Want To Build A Viewer
 
-### Project Settings
+The recommended route is one project JSON and one build command. The
+[SVSim project example](examples/svsim-project.json) describes paths and build
+settings; the [SVSim presentation example](examples/svsim-presentation.json)
+describes labels, groups, colors, and branding. Keep your edited copies and
+outputs outside this repository.
 
-- `version`: 1. `reader`: `iwfm-io`, using exactly 2.15.2. This convenience
-	command does not silently switch readers; existing legacy commands remain
-	unchanged and remain the default in the two original entry points.
-- `inputs.rootzone_main` and `inputs.preprocessor_main`: required input files.
-	Node, element, component, and area references are followed from these files.
-	Supply `inputs.simulation_main` for its verified `BDT`, or an explicit
-	top-level `coverage_start` ISO date/datetime or IWFM timestamp.
-- `inputs.zone_definition`: optional verified element-to-zone DAT or ZIP. Its
-	filename must contain `ZBudget` or `ZoneDef`, as required by the current build.
-	Omit it to leave subbasins off; model folders are not searched for zones.
-- `presentation_config`: required reference to the existing category/branding
-	schema. Its fields are not duplicated in the project schema.
-- `map.start_year`: required integer. Maps remain July 1 snapshots; the final
-	year is derived from common source coverage, not supplied or extended.
-- `coordinates`: explicitly declare `datum: NAD83`, `projection: UTM`,
-	`hemisphere: north`, integer `zone: 1..60`, and `units: metres`. This describes
-	the current GRS80 UTM-to-Web-Mercator geometry code, not a general CRS engine.
-	Verify the CRS using model documentation/GIS metadata; the command trusts
-	these explicit declarations rather than inferring them from model names.
-- `units.model_area`: `square_feet`. Preflight requires preprocessor
-	`UNITLTOU=FEET`, `FACTLTOU=1`, and a node factor near 3.28084 (tolerance 0.0001,
-	allowing the verified rounded 3.2808). Area `FACT` must be 1 or 43560. The
-	existing geometry-area denominator and snapshot precision are unchanged.
-- `imagery`: `current` or `historical-naip`, matching the shared renderer modes.
-- `output_html`: required .html/.htm path. Existing files are protected by
-	default. Set `overwrite: true` explicitly to replace an intended output.
-- `snapshot_directory`: optional new/empty directory for retaining SQLite,
-	manifest, and index files. Existing nonempty directories and output/input
-	collisions are rejected; omitted means temporary cleanup.
+### 1. Get The Files And Set Up Python
 
-Initial support is root-zone v4.11, inline nonrecurring acreage inputs, and
-the coordinate/unit settings above. Fractions (`FACT=0`), DSS, other factors,
-formats, projections, datums, hemispheres, and coordinate units are unsupported.
-Preflight validates file references, settings, coverage, presentation IDs, and
-output conflicts before the existing build/export workflow runs. No model
-simulation is executed. Network access is needed only for optional imagery.
+Use Python 3.10 or newer. If you downloaded a repository ZIP, extract it first;
+you do not need Git to build a viewer. Open PowerShell and change to the folder
+containing this README and [build_viewer.py](build_viewer.py).
 
-Keep project files with personal paths, real decks, retained snapshots, generated
-HTML, and comparison outputs outside this repository.
-
-## Experimental Input Adapter
-
-`iwfm_input_adapter.py` is independently usable. Both viewer entry points now
-offer an opt-in adapter build; the default build still uses the legacy reader.
-The standalone exporter and viewer templates are unchanged.
-From the repository root, create a separate environment outside the repository.
-These PowerShell commands do not require activation or an execution-policy change:
+Replace the first path below with your extracted repository folder. The virtual
+environment is a separate Python installation for this tool; the commands use
+it directly, so no activation or PowerShell execution-policy change is needed.
 
 ```powershell
-python -m venv "$env:TEMP\iwfm-adapter-review-venv"
-& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" -m pip install -r requirements-adapter.txt
-& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" -B -m unittest discover -s tests -v
+Set-Location 'PATH_TO_IWFM_LAND_USE_VIEWER_REPOSITORY'
+$Repo = (Get-Location).Path
+$Environment = Join-Path $env:LOCALAPPDATA 'IWFM-Land-Use-Viewer/python-env'
+python -m venv $Environment
+$Python = Join-Path $Environment 'Scripts/python.exe'
+& $Python -m pip install -r (Join-Path $Repo 'requirements-adapter.txt')
 ```
 
-Use Python 3.10 or newer. Repo-only tests require no real model, comparison
-reports, or existing viewer outputs. Real-deck comparisons are separate local
-diagnostics, not part of this test command.
+If Python is installed as `py` rather than `python`, use `py -3` in the
+environment-creation command. Package installation requires internet access.
+Do not upgrade the pinned reader independently of this repository.
 
-```python
-from datetime import datetime
-From the repository root, use Python 3.10 or newer in an isolated environment
-and install the pinned reader with:
+### 2. Copy And Edit The SVSim Examples
+
+Run this in the same PowerShell session. The new project folder is outside the
+repository. Use another new folder name for a separate model or repeat build.
 
 ```powershell
-python -m pip install -r requirements-adapter.txt
+$Project = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'IWFM-viewer-project'
+New-Item -ItemType Directory -Path $Project -ErrorAction Stop | Out-Null
+Copy-Item (Join-Path $Repo 'examples/svsim-project.json') (Join-Path $Project 'project.json')
+Copy-Item (Join-Path $Repo 'examples/svsim-presentation.json') (Join-Path $Project 'presentation.json')
+notepad (Join-Path $Project 'project.json')
 ```
 
-basis = UnitBasis.from_preprocessor(preprocessor_main_path)
-adapter = IWFMInputAdapter(
-	rootzone_main_path,
-	working_directory=simulation_directory,
-	element_ids=element_ids,
-	unit_basis=basis,
-	coverage_start=datetime(1973, 10, 1),
-	legacy_aliases=C2VSIMFG_ALIASES,
-)
-source = adapter.read_source('nonponded')
-snapshot = source.values_at(datetime(2000, 7, 1))
-```
+In your project JSON, edit:
 
-The paths, expected element IDs, and authoritative coverage start are supplied
-by the caller. Nonponded category order comes from `NCROP`/`CCODE`; the other
-sources use v4.11 slots. Names and optional aliases never define column order.
-Label overrides use namespaced category IDs, for example `nonponded:OR`.
-Input metadata descriptions are labels only; unnamed nonponded crops receive
-neutral positional labels. Budget-reporting codes are returned separately.
-
-Each source retains original timestamp strings, normalized exclusive interval
-ends, raw values, and float64 acres indexed by endpoint and element ID. Lookup
-selects the first endpoint strictly after the requested instant and returns
-`None` before the supplied coverage start or at/after the final endpoint.
-Sources are read separately, without timeline joins, retention filtering,
-extrapolation, or float32 serialization. A blank component reference is absent,
-not a zero-valued source.
-
-The accepted root-zone and area inputs contain interval ends, not an authoritative
-beginning of coverage. The adapter does not read the simulation main or infer
-the first interval's start. The caller must supply a verified `coverage_start`
-(for example, the simulation beginning instant). This is an inclusive lower
-bound; it is trusted, not independently verified from these inputs. Requests
-must use naive model datetimes, including the next-day midnight corresponding
-to an IWFM `24:00` stamp.
-
-| Lookup Instant | Result |
+| Setting | What To Supply Or Check |
 |---|---|
-| Before `coverage_start` | `None` |
-| At `coverage_start` | First block whose end is strictly later |
-| At an interior endpoint | Following block |
-| At or after the final endpoint | `None` |
+| `inputs.rootzone_main` | Replace `PATH_TO_SVSIM_MODEL` with the extracted deck path; preserve the root-zone filename for SVSim. |
+| `inputs.preprocessor_main` | Point to the preprocessor control file, which references the node and element files. |
+| `inputs.simulation_main` | Point to the simulation control file; its `BDT` supplies the beginning of coverage. |
+| `presentation_config` | Replace the placeholder with `presentation.json`, the copy beside your project JSON. |
+| `map.start_year` | First display year; 2000 is covered by the tested SVSim v1.0 inputs. The final year comes from input coverage. |
+| `coordinates` | Verify datum, projection, hemisphere, zone, and native coordinate units from model documentation or GIS metadata. |
+| `units.model_area` | Verify the model uses square feet; also check node and area conversion factors described below. |
+| `imagery` | `current` for USGS imagery only, or `historical-naip` for the historical/latest selector. |
+| `output_html` | Keep `output/svsim-land-use.html`, or choose a new external output path. |
 
-`None` means missing coverage; a returned zero remains a covered acreage value.
+All relative paths are relative to **project.json**, even when you run the
+command from another directory. In JSON, write Windows paths with forward
+slashes, such as `C:/Models/SVSim`, or escape backslashes as `C:\\Models\\SVSim`.
 
-Initial support is deliberately limited to root-zone v4.11, iwfm-io 2.15.2,
-inline nonrecurring data, and verified model square feet with area `FACT` equal
-to 1 (square feet) or 43560 (acres). Other formats, unknown units, other factors,
-`FACT=0` fractions, and DSS inputs raise errors. Preprocessor evidence requires
-`UNITLTOU=FEET` and `FACTLTOU=1`; alternatively, callers can supply an explicit
-`UnitBasis` with verified evidence. No node factor, CRS conversion, or geometry
-area denominator is changed or calculated by this adapter.
+The checked SVSim v1.0 deck uses NAD83 UTM Zone 10N in metres, node `FACT=3.2808`,
+model feet, and area `FACT=43560`. Its node-file documentation and GIS projection
+metadata agree. Do not apply those settings to another model without checking.
 
-The adapter uses the private `iwfm_io._parser.IWFMFileReader` for the format
-header and nonponded declaration preflight. In 2.15.2, duplicate crop codes can
-otherwise reach pandas and cause a generic `TypeError` before the full direct
-component reader returns. Preflight provides an actionable file/code/column
-error without replacing the area reader. The exact dependency pin protects
-this private-API contract; upgrades require rechecking it and the repo tests.
+Optionally open your `presentation.json` in Notepad to change `model_title` and
+`export_filename_prefix`. That file uses the existing category schema; labels
+do not assign acreage columns. See the [configuration reference](README_landuse_regeneration.md#category-and-branding-configuration)
+for group definitions and a C2VSimFG example.
 
-Keep real model decks and comparison reports outside this repository. Tests
-generate small synthetic reader fixtures in temporary directories; they are
-not executable-certified IWFM models.
+### 3. Build And Open The Viewer
 
-## Opt-In C2VSimFG Build
-
-Install the pinned adapter requirements using the environment commands above.
-Set `$Model`, `$Inputs`, and `$Output` to external folders. `$Inputs` is the
-existing flat input folder used for legacy builds; both paths use any optional
-ZoneBudget definition found there. Opt-in geometry comes from the referenced
-preprocessor node/element files, not filename guessing.
+Run in the same PowerShell session:
 
 ```powershell
-& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\c2vsim_landuse_explorer_expanded.py build `
-	--reader iwfm-io --input $Inputs --output $Output --start-year 2000 --utm-zone 10 `
-	--rootzone-main "$Model\Simulation\RootZone\C2VSimFG_RootZone.dat" `
-	--preprocessor-main "$Model\Preprocessor\C2VSimFG_Preprocessor.in" `
-	--simulation-main "$Model\Simulation\C2VSimFG.in"
+& $Python (Join-Path $Repo 'build_viewer.py') --config (Join-Path $Project 'project.json')
+Invoke-Item (Join-Path $Project 'output/svsim-land-use.html')
 ```
 
-The NAIP script accepts the same build options. Alternatively supply an
-authoritative `--coverage-start 1973-10-01` instead of `--simulation-main`.
-An explicit start takes precedence; otherwise the pinned direct simulation
-reader supplies `BDT` and verifies the referenced root-zone main. Never derive
-coverage start from an interval end. Coverage must include January 1 of the
-display start year, because that is the unchanged chart start.
+If you changed `output_html`, open the absolute path printed after
+`Finished HTML:` instead. The final file needs no accompanying database or
+model files. By default the intermediate snapshot is temporary and removed.
 
-Omitting `--reader` (or using `--reader legacy`) keeps the original command,
-file discovery, reader, and standard-library-only dependencies. Unsupported
-opt-in inputs fail without falling back. Without configuration, the build
-requires all four sources and the full known alias set, mapped into legacy
-alias order. Configured builds use available adapter sources and their verified
-column order instead, including different nonponded crop counts.
+An existing HTML file is protected by default. Choose a new output name rather
+than enabling overwrite unless replacement is intentional. A failed export
+preserves existing HTML and publishes no partial final file. Default safe
+publication needs hard-link support, such as NTFS; see the
+[output-safety reference](README_landuse_regeneration.md#project-settings-and-output-safety)
+for explicit overwrite, retained snapshots, and retry behavior.
 
-Opt-in builds preserve the existing geometry-area denominator, labels, groups,
-colors, July 1 date selection, January-of-prior-year retention threshold,
-float32 element values, and float64 regional aggregates. Source timelines stay
-separate; the annual map range uses the common final coverage, while histories
-can show later ponded intervals with blanks for sources that have ended.
-The manifest adds `input_reader` provenance, factors, and original timestamps;
-it does not change the snapshot schema or template data contract.
+### Supported Inputs And Limitations
 
-Use separate output folders for legacy and opt-in comparisons. The existing
-standalone exporter accepts the adapter snapshot with either viewer template:
+The recommended build currently supports:
 
-```powershell
-& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\export_landuse_standalone.py `
-	--data $Output --viewer .\c2vsim_landuse_explorer_expanded.py --html $ExpandedHtml
-& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\export_landuse_standalone.py `
-	--data $Output --viewer .\c2vsim_landuse_explorer_naip.py --html $NaipHtml
-```
+- Root-zone input format **4.11**, using exactly **iwfm-io 2.15.2**. This is the
+  component format header, not the IWFM executable's release number.
+- Inline land-use time series with no repetition and no DSS input. Fractions
+  (`FACT=0`) and other root-zone formats are not supported by this workflow.
+- NAD83/GRS80 UTM north coordinates in metres, with an explicitly supplied zone.
+  It is not a general CRS conversion tool and does not infer CRS from filenames.
+- Model square feet: preprocessor `UNITLTOU=FEET` and `FACTLTOU=1`, node factor
+  near 3.28084, and area `FACT=1` (square feet) or `43560` (acres).
+- Different nonponded counts/orders from `NCROP`/`CCODE`; the other categories
+  follow the v4.11 slots. Descriptions are labels only. Unknown names use neutral
+  labels; categories present with zero acreage remain present.
 
-Keep `$Output`, `$ExpandedHtml`, `$NaipHtml`, and all comparison reports outside
-the repository. The local v2.0 candidate is not authenticated as the exact deck
-used for the previously shared viewer; record its provenance separately.
+Subbasins require an optional **verified element-to-zone definition**. They are
+not inferred from a GIS boundary or a model name. Leave them off for the SVSim
+quick start. The final map year uses common source coverage; charts can show a
+later interval for a source that continues after the others end.
 
-## Model Category Configuration
-
-Add `--model-config .\examples\c2vsimfg.json` to the opt-in build command above.
-This presentation-only JSON is supported only with `--reader iwfm-io`. The
-C2VSimFG example reproduces the current labels, category/group colors, All rice,
-All refuge, All nonponded crops, Native + riparian vegetation, and Total
-irrigated agriculture (explicitly excluding Idle and refuge).
-
-```json
-{
-	"version": 1,
-	"categories": {
-		"nonponded:OR": {"label": "Orchards", "color": "#ad6a1d"}
-	},
-	"groups": [
-		{
-			"id": "group:agriculture",
-			"label": "Agriculture",
-			"members": ["nonponded:OR", "nonponded:GR"],
-			"color": "#267747"
-		}
-	],
-	"initial_map_category": "group:agriculture"
-}
-```
-
-Category IDs are the adapter's source and code, for example `nonponded:OR`,
-`ponded:rice_fl`, `native:riparian`, and `urban:urban`. They are case-sensitive.
-The configuration cannot define categories, column numbers, ordering, or
-irrigated status. Available IDs and their input columns/codes/legacy aliases
-are recorded in the configured manifest's `category_identity` table.
-
-`categories` may override only `label` and `color`. Missing labels use one
-unambiguous model description, otherwise neutral positional names such as
-Nonponded crop 3. Conflicting descriptions remain neutral; explicit labels
-override them. Missing colors use a deterministic ID-based palette, so
-renaming or reordering does not change color identity. Duplicate display labels
-are allowed and remain separate map/chart/CSV series.
-Colors apply to chart/legend series; the existing numerical map ramp is retained.
-
-Group IDs must be unique `group:` identifiers containing lowercase letters,
-digits, underscores, or hyphens. Each group needs a nonempty label, six-digit
-hex color, and a nonempty list of unique existing category IDs. Groups cannot
-contain other groups. Optional `chart_toggle` binds one group to an existing
-grouping control: `nonpondedgroup`, `rice`, `refuge`, or `native`; each control
-may be bound once. Groups without a binding can still be selected through the
-map/chart synchronization option. The initial map value must be an existing
-category or group ID. Unknown references/fields, duplicate group IDs/members,
-invalid colors, and invalid control bindings raise errors.
-
-Optional `minimum_members` sets the number of selected members required for
-checkbox-driven grouping (default 1). Optional `partial_label` names a partial
-selection, with its selected count appended; otherwise the group label is
-used. The C2VSimFG example requires two selected nonponded crops for grouping,
-preserving the individual name and color when only one is selected.
-
-For another supported v4.11 input set, change only the deck paths and JSON:
-
-```powershell
-& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\c2vsim_landuse_explorer_expanded.py build `
-	--reader iwfm-io --input $Inputs --output $Output --start-year 2019 --utm-zone 10 `
-	--rootzone-main $RootZone --preprocessor-main $Preprocessor `
-	--coverage-start 2018-10-01 --model-config $Configuration
-```
-
-Use the same standalone export commands above with either template. Configured
-CSV `category_codes` contains stable category IDs; labels remain display text.
-Configuration never changes acreage values, coverage, float32 storage, or the
-existing geometry denominator. The two templates and UI layout remain separate.
-
-### Category Data Flow
-
-- Adapter: verified `NCROP`/`CCODE` order or v4.11 slots define identity;
-	comments and budget-reporting order never define acreage columns.
-- SQLite: configured builds pack adapter order at the existing precision;
-	source widths and aggregation come from the verified category list.
-- Manifest: `codes` holds ordered IDs; labels/colors/groups are ID-keyed.
-	`model_configuration.category_identity` preserves input column/code identity.
-- Served/static/standalone readers: decode widths from the manifest, not the
-	legacy C2VSimFG lists. The standalone exporter needs no changes.
-- Controls and CSV: values and chart row keys use stable IDs; names are text.
-	Identical names cannot overwrite distinct series.
-
-The original `SOURCES`, C2VSimFG aliases/labels, and name-based group presets
-remain as no-config compatibility defaults. The separate raw templates retain
-those presets; shared hooks select ID-based configuration when present.
-Geographic names still come from the optional zone mapping. Page/export branding
-can be overridden with the optional settings below.
-
-### Model Branding And Subbasins
-
-Two optional top-level JSON settings control presentation:
-
-- `model_title`: nonempty text used for the browser tab, page heading, and
-	chart-export title. It is rendered as literal text, never HTML.
-- `export_filename_prefix`: 1-80 ASCII letters, digits, underscores, or hyphens,
-	starting with a letter or digit. Paths, dots, spaces, and Windows device names
-	such as `CON` or `LPT1` are rejected. It prefixes CSV and PNG download names.
-
-Omit either setting to retain its current C2VSimFG default. Existing snapshots
-without these settings retain their original browser/page titles and filename
-prefix. The settings change no values, source intervals, or category identities.
-
-When the snapshot has no subbasin mapping, subbasin mode and boundary/reference
-controls are hidden, selection context omits subbasins, and chart exports omit
-the subbasin metadata line. The CSV column schema stays unchanged: subbasin
-values are blank. If a mapping is supplied, mapped names and genuinely
-unassigned elements retain their existing labels, controls, and CSV values.
-
-### SVSim Build Recipe
-
-A minimal external SVSim configuration is:
-
-```json
-{
-	"version": 1,
-	"model_title": "SVSim land use",
-	"export_filename_prefix": "SVSim_landuse",
-	"categories": {},
-	"groups": [],
-	"initial_map_category": "nonponded:GR"
-}
-```
-
-The existing SVSim configuration can retain its category/group definitions and
-add only the two branding settings. Replace the placeholder paths below; keep
-the JSON, snapshot, and HTML outside this repository. SVSim v1.0's node
-documentation and GIS projection metadata verify NAD83 UTM Zone 10N in metres.
-Using its root-zone input directory leaves subbasins off; do not add a zone file
-without verifying its element-to-zone mapping.
-
-```powershell
-$Model = 'PATH_TO_EXTRACTED_SVSIM_MODEL'
-$Configuration = 'PATH_TO_EXTERNAL_SVSIM_JSON'
-$Output = 'PATH_TO_EXTERNAL_SNAPSHOT'
-$Html = 'PATH_TO_EXTERNAL_SVSIM_HTML'
-& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\c2vsim_landuse_explorer_expanded.py build `
-	--reader iwfm-io --input "$Model\Simulation\RootZone" --output $Output `
-	--start-year 2000 --utm-zone 10 `
-	--rootzone-main "$Model\Simulation\RootZone\SVSim_RootZone.dat" `
-	--preprocessor-main "$Model\PreProcessor\SVSim_Preprocessor.in" `
-	--simulation-main "$Model\Simulation\SVSim.in" --model-config $Configuration
-& "$env:TEMP\iwfm-adapter-review-venv\Scripts\python.exe" .\export_landuse_standalone.py `
-	--data $Output --viewer .\c2vsim_landuse_explorer_expanded.py --html $Html
-```
-
-For the NAIP variant, use `c2vsim_landuse_explorer_naip.py` as the export template
-and a separate external HTML path. The same branding and subbasin rules apply.
-
-## Shared Viewer Renderer
-
-Both entry points expose the same `HTML` constant used by local serving,
-`export-web`, and the standalone exporter. It now comes from
-`viewer_renderer.render_viewer(imagery=...)` and shared `viewer_assets/` files.
-No CLI arguments or exporter interfaces changed.
-
-- `current` is the renderer default and the expanded entry point's mode:
-	current USGS imagery, without historical imagery controls.
-- `historical-naip` is the NAIP entry point's mode: current USGS, latest NAIP,
-	and the existing fixed-year choices, defaulting to NAIP 2022, with status/retry.
-
-The base markup, mapping, selection, chart, export, branding, and subbasin code
-are shared. Only imagery controls, attribution/help, tile handling, and event
-bindings vary. Model configuration is applied after imagery assembly, as before.
-Keep `viewer_renderer.py`, `viewer_assets/`, and `model_configuration.py` with
-the existing scripts. The renderer requires only the Python standard library;
-the optional input reader dependency remains opt-in.
+The original scripts still default to the legacy C2VSimFG reader. That path has
+fixed category and unit assumptions and is not the recommended generic build.
+For existing commands, SQLite snapshots, static hosting, and advanced options,
+use [the regeneration reference](README_landuse_regeneration.md). For changes
+to this repository, see [CONTRIBUTING.md](CONTRIBUTING.md).
