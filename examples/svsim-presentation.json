@@ -1,8 +1,70 @@
 {
   "version": 1,
-  "model_title": "SVSim land use",
-  "export_filename_prefix": "SVSim_landuse",
-  "categories": {},
-  "groups": [],
-  "initial_map_category": "nonponded:GR"
+  "model_title": "SVSim v1.0 land use",
+  "export_filename_prefix": "SVSim_v1_0_landuse",
+  "categories": {
+    "nonponded:GR": {"label": "Grain", "color": "#137f8b"},
+    "nonponded:CO": {"label": "Cotton", "color": "#d35a49"},
+    "nonponded:SB": {"label": "Sugar Beets", "color": "#9472ad"},
+    "nonponded:CN": {"label": "Corn", "color": "#b48b31"},
+    "nonponded:DB": {"label": "Dry Beans", "color": "#537db5"},
+    "nonponded:SA": {"label": "Safflower", "color": "#4e9a68"},
+    "nonponded:FL": {"label": "Other Field", "color": "#ae6688"},
+    "nonponded:AL": {"label": "Alfalfa", "color": "#6d7690"},
+    "nonponded:PA": {"label": "Pasture", "color": "#d07e48"},
+    "nonponded:TP": {"label": "Tomato-Processing", "color": "#718b47"},
+    "nonponded:TF": {"label": "Tomato-Fresh", "color": "#435ba8"},
+    "nonponded:CU": {"label": "Cucurbits", "color": "#8c564b"},
+    "nonponded:OG": {"label": "Onions & Garlic", "color": "#a54370"},
+    "nonponded:PO": {"label": "Potatoes", "color": "#467b96"},
+    "nonponded:TR": {"label": "Other Truck", "color": "#806930"},
+    "nonponded:AP": {"label": "Almonds & Pistachios", "color": "#396f45"},
+    "nonponded:OR": {"label": "Other Deciduous", "color": "#ad6a1d"},
+    "nonponded:CS": {"label": "Citrus & Subtropical", "color": "#7b4d9c"},
+    "nonponded:VI": {"label": "Vineyards", "color": "#a54b3d"},
+    "nonponded:ID": {"label": "Idle", "color": "#526f70"},
+    "ponded:rice_fl": {"label": "Rice: flooded decomposition", "color": "#337e95"},
+    "ponded:rice_nfl": {"label": "Rice: nonflooded decomposition", "color": "#239d87"},
+    "ponded:rice_ndc": {"label": "Rice: no decomposition", "color": "#427d61"},
+    "ponded:refuge_sl": {"label": "Seasonal refuge", "color": "#7955a1"},
+    "ponded:refuge_pr": {"label": "Permanent refuge", "color": "#a75b99"},
+    "native:native": {"label": "Native vegetation", "color": "#698c40"},
+    "native:riparian": {"label": "Riparian vegetation", "color": "#9c7939"},
+    "urban:urban": {"label": "Urban", "color": "#626a79"}
+  },
+  "groups": [
+    {
+      "id": "group:nonponded",
+      "label": "All nonponded crops",
+      "members": ["nonponded:GR", "nonponded:CO", "nonponded:SB", "nonponded:CN", "nonponded:DB", "nonponded:SA", "nonponded:FL", "nonponded:AL", "nonponded:PA", "nonponded:TP", "nonponded:TF", "nonponded:CU", "nonponded:OG", "nonponded:PO", "nonponded:TR", "nonponded:AP", "nonponded:OR", "nonponded:CS", "nonponded:VI", "nonponded:ID"],
+      "color": "#b48b31",
+      "chart_toggle": "nonpondedgroup",
+      "minimum_members": 2,
+      "partial_label": "Selected nonponded crops"
+    },
+    {
+      "id": "group:rice",
+      "label": "All rice",
+      "members": ["ponded:rice_fl", "ponded:rice_nfl", "ponded:rice_ndc"],
+      "color": "#137f8b",
+      "chart_toggle": "rice",
+      "partial_label": "Selected rice"
+    },
+    {
+      "id": "group:refuge",
+      "label": "All refuge",
+      "members": ["ponded:refuge_sl", "ponded:refuge_pr"],
+      "color": "#9472ad",
+      "chart_toggle": "refuge",
+      "partial_label": "Selected refuge"
+    },
+    {
+      "id": "group:native",
+      "label": "Native + riparian vegetation",
+      "members": ["native:native", "native:riparian"],
+      "color": "#4e9a68",
+      "chart_toggle": "native"
+    }
+  ],
+  "initial_map_category": "group:nonponded"
 }

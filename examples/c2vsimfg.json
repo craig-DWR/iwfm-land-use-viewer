@@ -1,5 +1,7 @@
 {
   "version": 1,
+  "model_title": "C2VSimFG v1.5 land use",
+  "export_filename_prefix": "C2VSimFG_v1_5_landuse",
   "categories": {
     "nonponded:GR": {"label": "Grain", "color": "#137f8b"},
     "nonponded:CO": {"label": "Cotton", "color": "#d35a49"},
