@@ -3,10 +3,11 @@
 python export_landuse_standalone.py --data landuse_explorer --viewer c2vsim_landuse_explorer_naip.py --html landuse_standalone_naip.html
 Requires Python standard library. Open output in a current Edge/Chrome/Firefox browser.
 """
+
 import argparse, array, base64, gzip, importlib.util, json, sqlite3, sys
 from pathlib import Path
 
-API = r'''
+API = r"""
 const embeddedCache=new Map();let embeddedGeometry,embeddedIndex,embeddedAreas;
 async function embeddedBytes(key){
   if(!embeddedCache.has(key))embeddedCache.set(key,(async()=>{
@@ -80,46 +81,110 @@ async function api(path){
   }
   throw Error('Unknown data path: '+path);
 }
-'''
+"""
+
 
 def encode(b):
-    return base64.b64encode(gzip.compress(b,compresslevel=9,mtime=0)).decode('ascii')
+    return base64.b64encode(gzip.compress(b, compresslevel=9, mtime=0)).decode("ascii")
 
-def export(data,viewer,html):
+
+def export(data, viewer, html):
     """Embed retained input histories rather than replacing them with July 1 samples."""
-    spec=importlib.util.spec_from_file_location('viewer_template',viewer);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    manifest=module.reconcile_dates(json.loads((data/'manifest.json').read_text()))
-    conn=sqlite3.connect(f'file:{(data/"landuse.sqlite").resolve()}?mode=ro',uri=True)
-    elements=conn.execute('SELECT id,region,subbasin,acres,xy FROM elements ORDER BY id').fetchall()
-    geometry=[dict(id=i,region=r,subbasin=b,acres=a,xy=json.loads(xy)) for i,r,b,a,xy in elements]
-    ids={e[0]:i for i,e in enumerate(elements)};N=len(elements);blocks=[]
-    blocks.append('<script id="data-manifest" type="application/json">'+json.dumps(manifest,separators=(',',':')).replace('<','\\u003c')+'</script>')
-    def add(key,b):
-        payload=encode(b);blocks.append(f'<script id="data-{key}" type="application/octet-stream">{payload}</script>');return len(payload)
-    add('geometry',json.dumps(geometry,separators=(',',':')).encode())
-    # Each source keeps its own endpoints; dictionary reuse changes storage, not coverage.
-    for source,codes in manifest['codes'].items():
-        dates=[r[0] for r in conn.execute('SELECT DISTINCT effective FROM areas WHERE source=? ORDER BY effective',(source,))]
-        if dates!=manifest['dates'][source]:raise ValueError('Manifest/database dates disagree: '+source)
-        date_indices={d:t for t,d in enumerate(dates)};indices=array.array('I',[0])*(N*len(dates));dictionary={};values=bytearray();seen=0
-        for date,eid,blob in conn.execute('SELECT effective,element,vals FROM areas WHERE source=? ORDER BY effective,element',(source,)):
-            if len(blob)!=4*len(codes):raise ValueError('Unexpected value size')
-            index=dictionary.get(blob)
-            if index is None:index=len(dictionary);dictionary[blob]=index;values.extend(blob)
-            indices[date_indices[date]*N+ids[eid]]=index;seen+=1
-        if seen!=len(indices):raise ValueError('Missing source records')
-        if sys.byteorder!='little':indices.byteswap()
-        size=add(source+'-values',values)+add(source+'-indices',indices.tobytes())
-        print(f'{source}: {seen:,} records -> {len(dictionary):,} unique vectors; embedded {size/1048576:.2f} MiB',flush=True)
-    conn.close()
-    old="async function api(path){let r=await fetch(path);if(!r.ok)throw Error(await r.text());return r.json()}"
-    if module.HTML.count(old)!=1:raise ValueError('Unsupported viewer template')
-    output=module.HTML.replace(old,API).replace('<script>','\n'.join(blocks)+'\n<script>',1)
-    output=output.replace('${manifest.count.toLocaleString()} elements · input snapshot ·','Land use input data ·')
-    # Catch startup problems and explain them in the existing status line.
-    output=output.replace('init();',"init().catch(error=>{$('status').textContent='Unable to load viewer: '+error.message;console.error(error)});")
-    html.write_text(output,encoding='utf-8')
-    print(f'Wrote {html}: {html.stat().st_size/1048576:.2f} MiB',flush=True)
+    spec = importlib.util.spec_from_file_location("viewer_template", viewer)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    manifest = module.reconcile_dates(json.loads((data / "manifest.json").read_text()))
+    conn = sqlite3.connect(
+        f"file:{(data / 'landuse.sqlite').resolve()}?mode=ro", uri=True
+    )
+    elements = conn.execute(
+        "SELECT id,region,subbasin,acres,xy FROM elements ORDER BY id"
+    ).fetchall()
+    geometry = [
+        dict(id=i, region=r, subbasin=b, acres=a, xy=json.loads(xy))
+        for i, r, b, a, xy in elements
+    ]
+    ids = {e[0]: i for i, e in enumerate(elements)}
+    N = len(elements)
+    blocks = []
+    blocks.append(
+        '<script id="data-manifest" type="application/json">'
+        + json.dumps(manifest, separators=(",", ":")).replace("<", "\\u003c")
+        + "</script>"
+    )
 
-if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--data',type=Path,required=True);p.add_argument('--viewer',type=Path,required=True);p.add_argument('--html',type=Path,required=True);a=p.parse_args();export(a.data,a.viewer,a.html)
+    def add(key, b):
+        payload = encode(b)
+        blocks.append(
+            f'<script id="data-{key}" type="application/octet-stream">{payload}</script>'
+        )
+        return len(payload)
+
+    add("geometry", json.dumps(geometry, separators=(",", ":")).encode())
+    # Each source keeps its own endpoints; dictionary reuse changes storage, not coverage.
+    for source, codes in manifest["codes"].items():
+        dates = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT effective FROM areas WHERE source=? ORDER BY effective",
+                (source,),
+            )
+        ]
+        if dates != manifest["dates"][source]:
+            raise ValueError("Manifest/database dates disagree: " + source)
+        date_indices = {d: t for t, d in enumerate(dates)}
+        indices = array.array("I", [0]) * (N * len(dates))
+        dictionary = {}
+        values = bytearray()
+        seen = 0
+        for date, eid, blob in conn.execute(
+            "SELECT effective,element,vals FROM areas WHERE source=? ORDER BY effective,element",
+            (source,),
+        ):
+            if len(blob) != 4 * len(codes):
+                raise ValueError("Unexpected value size")
+            index = dictionary.get(blob)
+            if index is None:
+                index = len(dictionary)
+                dictionary[blob] = index
+                values.extend(blob)
+            indices[date_indices[date] * N + ids[eid]] = index
+            seen += 1
+        if seen != len(indices):
+            raise ValueError("Missing source records")
+        if sys.byteorder != "little":
+            indices.byteswap()
+        size = add(source + "-values", values) + add(
+            source + "-indices", indices.tobytes()
+        )
+        print(
+            f"{source}: {seen:,} records -> {len(dictionary):,} unique vectors; embedded {size / 1048576:.2f} MiB",
+            flush=True,
+        )
+    conn.close()
+    old = "async function api(path){let r=await fetch(path);if(!r.ok)throw Error(await r.text());return r.json()}"
+    if module.HTML.count(old) != 1:
+        raise ValueError("Unsupported viewer template")
+    output = module.HTML.replace(old, API).replace(
+        "<script>", "\n".join(blocks) + "\n<script>", 1
+    )
+    output = output.replace(
+        "${manifest.count.toLocaleString()} elements · input snapshot ·",
+        "Land use input data ·",
+    )
+    # Catch startup problems and explain them in the existing status line.
+    output = output.replace(
+        "init();",
+        "init().catch(error=>{$('status').textContent='Unable to load viewer: '+error.message;console.error(error)});",
+    )
+    html.write_text(output, encoding="utf-8")
+    print(f"Wrote {html}: {html.stat().st_size / 1048576:.2f} MiB", flush=True)
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--data", type=Path, required=True)
+    p.add_argument("--viewer", type=Path, required=True)
+    p.add_argument("--html", type=Path, required=True)
+    a = p.parse_args()
+    export(a.data, a.viewer, a.html)
