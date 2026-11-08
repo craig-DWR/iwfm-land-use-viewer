@@ -56,6 +56,38 @@ class ViewerRendererTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("--reader", result.stdout)
 
+    def test_file_path_imports_keep_imagery_independent_outside_repository(self):
+        root = Path(__file__).resolve().parents[1]
+        code = """
+import importlib.util
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+modules = []
+for name in ['c2vsim_landuse_explorer_expanded.py', 'c2vsim_landuse_explorer_naip.py']:
+    spec = importlib.util.spec_from_file_location(name[:-3], root / name)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    modules.append(module)
+
+from viewer_renderer import render_viewer
+assert modules[0].HTML == render_viewer(imagery='current')
+assert modules[1].HTML == render_viewer(imagery='historical-naip')
+assert modules[0].subbasins is modules[1].subbasins
+assert callable(modules[0].build) and callable(modules[1].build)
+assert callable(modules[0].serve) and callable(modules[1].serve)
+assert callable(modules[0].export_web) and callable(modules[1].export_web)
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [sys.executable, "-B", "-c", code, str(root)],
+                cwd=directory,
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
